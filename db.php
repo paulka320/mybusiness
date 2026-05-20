@@ -3,12 +3,13 @@ if (!session_id()) {
     session_start();
 }
 
-$Host = 'sql205.infinityfree.com';
-$username = 'if0_41398422';
-$password = 'DqmCReFrsa';
-$database = 'if0_41398422_marketplace';
+$Host = $_ENV["MYSQLHOST"];
+$user = $_ENV["MYSQLUSER"];
+$password = $_ENV["MYSQLPASSWORD"];
+$database = $_ENV["MYSQLDATABASE"];
+$port =$_ENV["MYSQLPORT"]
 
-$conn = new mysqli($Host, $username, $password, $database);
+$conn = new mysqli($Host, $user, $password, $database,$port);
 $conn->set_charset('utf8mb4');
 
 if ($conn->connect_error) {
