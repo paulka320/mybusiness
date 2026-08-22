@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= product.title %> | EasyMarket</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+<%- include('header') %>
+<main class="section product-detail-section">
+    <div class="section-heading">
+        <div>
+            <h2><%= product.title %></h2>
+            <p><%= product.category_name || 'General' %> · Posted in Uganda</p>
+        </div>
+    </div>
+
+    <div class="product-detail-grid">
+        <div class="product-detail-image">
+            <div class="image-carousel">
+                <% if (images && images.length > 0) { %>
+                    <% images.forEach(function(img) { %>
+                        <img src="uploads/<%= img.image_path %>" alt="<%= product.title %>" class="carousel-image">
+                    <% }); %>
+                <% } else { %>
+                    <img src="uploads/<%= product.image %>" alt="<%= product.title %>" class="carousel-image">
+                <% } %>
+            </div>
+            <% if (images && images.length > 1) { %>
+                <button class="carousel-prev">&lt;</button>
+                <button class="carousel-next">&gt;</button>
+                <div class="carousel-indicators">
+                    <% for (var i = 0; i < images.length; i++) { %>
+                        <button class="indicator<%= i === 0 ? ' active' : '' %>" data-index="<%= i %>"></button>
+                    <% } %>
+                </div>
+                <p class="hint">Use arrows to view the product from all angles.</p>
+            <% } %>
+        </div>
+        <div class="product-detail-info">
+            <p class="product-detail-price">UGX <%= Number(product.price).toLocaleString() %></p>
+            <form class="add-to-cart-form" method="POST" action="">
+                <label>Quantity</label>
+                <input type="number" name="quantity" min="1" max="<%= product.quantity %>" value="1" required>
+                <button type="submit" class="cart-action" data-id="<%= product.id %>" data-title="<%= product.title %>" data-price="<%= product.price %>" data-image="<%= product.image %>">Add to Cart</button>
+            </form>
+
+            <div class="product-detail-meta">
+                <p><strong>Location:</strong> <%= product.location %></p>
+                <p><strong>Seller Phone:</strong> <%= product.phone %></p>
+                <p><strong>Payment Code:</strong> <%= product.payment_code %></p>
+                <p><strong>Available Quantity:</strong> <%= product.quantity %></p>
+            </div>
+
+            <div class="product-detail-description">
+                <h3>Product Description</h3>
+                <p><%- (product.description || '').replace(/\n/g, '<br>') %></p>
+            </div>
+        </div>
+    </div>
+
+    <% if (similar && similar.length > 0) { %>
+        <section class="section">
+            <div class="section-heading">
+                <h2>More from this category</h2>
+            </div>
+            <div class="products-grid">
+                <% similar.forEach(function(row) { %>
+                    <article class="product-card">
+                        <a class="product-link" href="product.php?id=<%= row.id %>">
+                            <div class="product-image">
+                                <img src="uploads/<%= row.image %>" alt="<%= row.title %>">
+                            </div>
+                            <div class="product-body">
+                                <h3><%= row.title %></h3>
+                                <div class="product-footer">
+                                    <span class="price">UGX <%= Number(row.price).toLocaleString() %></span>
+                                </div>
+                            </div>
+                        </a>
+                    </article>
+                <% }); %>
+            </div>
+        </section>
+    <% } %>
+</main>
+</body>
+</html>

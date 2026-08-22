@@ -1,0 +1,6 @@
+{
+  "name": "EasyMarket",
+  "description": "Marketplace to buy and sell products across Uganda with category browsing, multi-angle images, shopping cart, and order checkout.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

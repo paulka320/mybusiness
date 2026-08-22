@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="#f1f5f9"/>
+  <rect x="120" y="40" width="160" height="320" rx="30" fill="url(#bg)" stroke="#94a3b8" stroke-width="4"/>
+  <!-- Camera bump -->
+  <rect x="135" y="55" width="65" height="65" rx="14" fill="#0f172a"/>
+  <circle cx="152" cy="72" r="10" fill="#38bdf8" stroke="#64748b" stroke-width="2"/>
+  <circle cx="152" cy="102" r="10" fill="#38bdf8" stroke="#64748b" stroke-width="2"/>
+  <circle cx="182" cy="87" r="10" fill="#38bdf8" stroke="#64748b" stroke-width="2"/>
+  <circle cx="200" cy="200" r="18" fill="none" stroke="#64748b" stroke-width="3"/>
+  <text x="200" y="260" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" text-anchor="middle">Back View</text>
+</svg>

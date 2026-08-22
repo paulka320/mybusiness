@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout | EasyMarket</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+<%- include('header') %>
+<main class="section upload-section">
+    <div class="section-heading">
+        <h2>Checkout</h2>
+        <p>Confirm your order details and place your purchase.</p>
+    </div>
+
+    <% if (locals.success) { %>
+        <div class="alert alert-success"><%= success %></div>
+        <script>window.orderPlaced = true;</script>
+        <p><a href="index.php">Continue shopping</a> or view your <a href="orders.php">orders</a>.</p>
+    <% } else { %>
+        <% if (locals.errors && errors.length > 0) { %>
+            <div class="alert alert-error">
+                <ul>
+                    <% errors.forEach(function(error) { %>
+                        <li><%= error %></li>
+                    <% }); %>
+                </ul>
+            </div>
+        <% } %>
+
+        <div id="checkout-items" class="cart-items"></div>
+
+        <form id="checkout-form" class="product-form" method="POST" action="checkout.php">
+            <input type="hidden" id="cart_data" name="cart_data" value="">
+
+            <label>Delivery Address</label>
+            <textarea name="address" required><%= locals.address || '' %></textarea>
+
+            <label>Phone Number</label>
+            <input type="text" name="phone" value="<%= locals.phone || '' %>" required>
+
+            <label>Payment Reference</label>
+            <input type="text" name="payment_reference" value="<%= locals.payment_reference || '' %>" placeholder="Enter payment reference or mobile money code">
+
+            <button id="checkout-submit" type="submit">Place Order</button>
+        </form>
+    <% } %>
+</main>
+</body>
+</html>

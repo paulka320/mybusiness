@@ -1,0 +1,21 @@
+<header class="site-header">
+    <div class="top-bar">
+        <a class="logo" href="index.php">EasyMarket</a>
+        <nav class="main-nav">
+            <a href="index.php">Home</a>
+            <a href="upload.php">Sell</a>
+            <a href="cart.php">Cart <span id="cart-count">0</span></a>
+            <% if (locals.user && locals.user.id) { %>
+                <a href="orders.php">My Orders</a>
+                <% if (locals.user.is_admin == 1) { %>
+                    <a href="admin_dashboard.php">Admin</a>
+                <% } %>
+                <a href="logout.php">Logout</a>
+                <span class="nav-user">Hi, <%= locals.user.name %></span>
+            <% } else { %>
+                <a href="login.php">Login</a>
+                <a href="register.php">Register</a>
+            <% } %>
+        </nav>
+    </div>
+</header>

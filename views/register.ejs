@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register | EasyMarket</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<%- include('header') %>
+<main class="section upload-section">
+    <div class="section-heading">
+        <h2>Create your account</h2>
+        <p>Save your cart and complete checkout securely.</p>
+    </div>
+
+    <% if (locals.errors && errors.length > 0) { %>
+        <div class="alert alert-error">
+            <ul>
+                <% errors.forEach(function(error) { %>
+                    <li><%= error %></li>
+                <% }); %>
+            </ul>
+        </div>
+    <% } %>
+
+    <form class="product-form" method="POST" action="register.php">
+        <label>Name</label>
+        <input type="text" name="name" placeholder="Your name" value="<%= locals.name || '' %>" required>
+
+        <label>Email</label>
+        <input type="email" name="email" placeholder="you@example.com" value="<%= locals.email || '' %>" required>
+
+        <label>Password</label>
+        <input type="password" name="password" required>
+
+        <label>Confirm Password</label>
+        <input type="password" name="confirm" required>
+
+        <button type="submit">Register</button>
+    </form>
+
+    <p>Already have an account? <a href="login.php">Login here</a>.</p>
+</main>
+</body>
+</html>

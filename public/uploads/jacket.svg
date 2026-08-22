@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="leather" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#451a03"/>
+      <stop offset="100%" stop-color="#1c1917"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="#fef2f2"/>
+  <!-- Jacket shape -->
+  <path d="M120 100 L160 80 L200 120 L240 80 L280 100 L320 200 L280 220 L260 170 L260 330 L140 330 L140 170 L120 220 L80 200 Z" fill="url(#leather)" stroke="#78350f" stroke-width="4"/>
+  <!-- Zipper & lapels -->
+  <line x1="200" y1="120" x2="200" y2="330" stroke="#d97706" stroke-width="3" stroke-dasharray="4,2"/>
+  <path d="M160 80 L200 120 L180 200" fill="none" stroke="#d97706" stroke-width="3"/>
+  <path d="M240 80 L200 120 L220 200" fill="none" stroke="#d97706" stroke-width="3"/>
+  <text x="200" y="370" fill="#78350f" font-family="system-ui, sans-serif" font-size="16" font-weight="bold" text-anchor="middle">Men's Leather Jacket</text>
+</svg>

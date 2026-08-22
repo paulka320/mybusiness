@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <rect width="400" height="400" fill="#f1f5f9"/>
+  <!-- Left Side View (Thin profile) -->
+  <rect x="185" y="40" width="30" height="320" rx="8" fill="#1e293b" stroke="#94a3b8" stroke-width="3"/>
+  <rect x="180" y="90" width="5" height="20" rx="2" fill="#64748b"/>
+  <rect x="180" y="125" width="5" height="35" rx="2" fill="#64748b"/>
+  <rect x="180" y="170" width="5" height="35" rx="2" fill="#64748b"/>
+  <text x="200" y="220" fill="#334155" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" text-anchor="middle">Left Side View</text>
+</svg>

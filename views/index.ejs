@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EasyMarket | Buy & Sell in Uganda</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+<%- include('header') %>
+<main>
+    <section class="hero section">
+        <div class="hero-copy">
+            <span class="eyebrow">Shop with confidence</span>
+            <h1>Discover the best deals across Uganda</h1>
+            <p>Search phones, fashion, electronics, home appliances and more from trusted sellers.</p>
+            <form class="hero-search" method="GET" action="index.php">
+                <input type="search" name="search" value="<%= search %>" placeholder="Search products, brands or categories">
+                <button type="submit">Search</button>
+            </form>
+        </div>
+        <div class="hero-image"></div>
+    </section>
+
+    <section class="section categories-section">
+        <div class="section-heading">
+            <h2>Shop by Category</h2>
+        </div>
+        <div class="category-list">
+            <% categories.forEach(function(cat) { %>
+                <a href="category.php?id=<%= cat.id %>" class="category-pill<%= categorySelected === cat.id ? ' active' : '' %>"><%= cat.name %></a>
+            <% }); %>
+        </div>
+    </section>
+
+    <section class="section filter-section">
+        <form class="filter-form" method="GET" action="index.php">
+            <div class="filter-row">
+                <div class="filter-field">
+                    <label>Category</label>
+                    <select name="category_id">
+                        <option value="">All categories</option>
+                        <% categories.forEach(function(cat) { %>
+                            <option value="<%= cat.id %>" <%= categorySelected === cat.id ? 'selected' : '' %>><%= cat.name %></option>
+                        <% }); %>
+                    </select>
+                </div>
+                <div class="filter-field">
+                    <label>Min price</label>
+                    <input type="number" name="price_min" min="0" value="<%= minPrice > 0 ? minPrice : '' %>" placeholder="0">
+                </div>
+                <div class="filter-field">
+                    <label>Max price</label>
+                    <input type="number" name="price_max" min="0" value="<%= maxPrice > 0 ? maxPrice : '' %>" placeholder="0">
+                </div>
+                <div class="filter-field">
+                    <label>Sort by</label>
+                    <select name="sort">
+                        <option value="newest" <%= sort === 'newest' ? 'selected' : '' %>>Newest</option>
+                        <option value="price_asc" <%= sort === 'price_asc' ? 'selected' : '' %>>Price: Low to High</option>
+                        <option value="price_desc" <%= sort === 'price_desc' ? 'selected' : '' %>>Price: High to Low</option>
+                        <option value="title" <%= sort === 'title' ? 'selected' : '' %>>Title A–Z</option>
+                    </select>
+                </div>
+            </div>
+            <div class="filter-actions">
+                <button type="submit">Apply filters</button>
+                <a class="reset-link" href="index.php">Reset</a>
+            </div>
+        </form>
+    </section>
+
+    <section class="section products-section">
+        <div class="section-heading">
+            <h2><%= search ? ('Search results for "' + search + '"') : 'Latest Deals' %></h2>
+        </div>
+
+        <% if (products && products.length > 0) { %>
+            <div class="products-grid">
+                <% products.forEach(function(row) { %>
+                    <article class="product-card">
+                        <a class="product-link" href="product.php?id=<%= row.id %>">
+                            <div class="product-image">
+                                <img src="uploads/<%= row.image %>" alt="<%= row.title %>">
+                            </div>
+                            <div class="product-body">
+                                <p class="product-category"><%= row.category_name || 'General' %></p>
+                                <h3><%= row.title %></h3>
+                                <p class="product-description"><%= row.description ? (row.description.length > 90 ? row.description.substring(0, 90) + '...' : row.description) : '' %></p>
+                                <div class="product-footer">
+                                    <span class="price">UGX <%= Number(row.price).toLocaleString() %></span>
+                                    <span class="location">📍 <%= row.location %></span>
+                                </div>
+                                <p class="product-stock">In stock: <%= parseInt(row.quantity, 10) %></p>
+                            </div>
+                        </a>
+                        <button class="cart-action" type="button" data-id="<%= row.id %>" data-title="<%= row.title %>" data-price="<%= row.price %>" data-image="<%= row.image %>">Add to Cart</button>
+                    </article>
+                <% }); %>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <h3>No products found.</h3>
+                <p>Try another keyword or browse a category.</p>
+            </div>
+        <% } %>
+    </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Register | EasyMarket</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<%- include('header') %>
+<main class="section upload-section">
+    <div class="section-heading">
+        <h2>Admin Registration</h2>
+        <p>Register as an administrator.</p>
+    </div>
+
+    <% if (locals.errors && errors.length > 0) { %>
+        <div class="alert alert-error">
+            <ul>
+                <% errors.forEach(function(error) { %>
+                    <li><%= error %></li>
+                <% }); %>
+            </ul>
+        </div>
+    <% } %>
+
+    <form class="product-form" method="POST" action="admin_register.php">
+        <label>Name</label>
+        <input type="text" name="name" placeholder="Your name" value="<%= locals.name || '' %>" required>
+
+        <label>Email</label>
+        <input type="email" name="email" placeholder="you@example.com" value="<%= locals.email || '' %>" required>
+
+        <label>Password</label>
+        <input type="password" name="password" required>
+
+        <label>Confirm Password</label>
+        <input type="password" name="confirm" required>
+
+        <label>Admin Code</label>
+        <input type="password" name="admin_code" placeholder="Enter admin code" required>
+
+        <button type="submit">Register as Admin</button>
+    </form>
+</main>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login | EasyMarket</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<%- include('header') %>
+<main class="section upload-section">
+    <div class="section-heading">
+        <h2>Admin Login</h2>
+        <p>Login to manage products.</p>
+    </div>
+
+    <% if (locals.errors && errors.length > 0) { %>
+        <div class="alert alert-error">
+            <ul>
+                <% errors.forEach(function(error) { %>
+                    <li><%= error %></li>
+                <% }); %>
+            </ul>
+        </div>
+    <% } %>
+
+    <form class="product-form" method="POST" action="admin_login.php">
+        <label>Email</label>
+        <input type="email" name="email" placeholder="you@example.com" value="<%= locals.email || '' %>" required>
+
+        <label>Password</label>
+        <input type="password" name="password" required>
+
+        <button type="submit">Login as Admin</button>
+    </form>
+</main>
+</body>
+</html>

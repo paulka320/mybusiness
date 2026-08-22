@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sell on EasyMarket</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+<%- include('header') %>
+<main class="section upload-section">
+    <div class="section-heading">
+        <h2>Sell a product</h2>
+        <p>List your item for buyers to discover.</p>
+    </div>
+
+    <% if (locals.success) { %>
+        <div class="alert alert-success"><%= success %></div>
+    <% } %>
+
+    <% if (locals.errors && errors.length > 0) { %>
+        <div class="alert alert-error">
+            <ul>
+                <% errors.forEach(function(error) { %>
+                    <li><%= error %></li>
+                <% }); %>
+            </ul>
+        </div>
+    <% } %>
+
+    <form class="product-form" method="POST" enctype="multipart/form-data" action="upload.php">
+        <label>Title</label>
+        <input type="text" name="title" value="<%= locals.formData ? (formData.title || '') : '' %>" placeholder="Product title" required>
+
+        <label>Description</label>
+        <textarea name="description" placeholder="Product description" required><%= locals.formData ? (formData.description || '') : '' %></textarea>
+
+        <label>Price (UGX)</label>
+        <input type="number" step="0.01" name="price" value="<%= locals.formData ? (formData.price || '') : '' %>" placeholder="Price" required>
+
+        <label>Quantity</label>
+        <input type="number" name="quantity" min="0" value="<%= locals.formData ? (formData.quantity || '') : '' %>" placeholder="Available quantity" required>
+
+        <label>Category</label>
+        <select name="category" required>
+            <option value="">Select a category</option>
+            <% categories.forEach(function(c) { %>
+                <option value="<%= c.id %>" <%= (locals.formData && formData.category == c.id) ? 'selected' : '' %>><%= c.name %></option>
+            <% }); %>
+        </select>
+
+        <label>Phone</label>
+        <input type="text" name="phone" value="<%= locals.formData ? (formData.phone || '') : '' %>" placeholder="Seller phone" required>
+
+        <label>Location</label>
+        <input type="text" name="location" value="<%= locals.formData ? (formData.location || '') : '' %>" placeholder="Location" required>
+
+        <label>Payment Code</label>
+        <input type="text" name="payment" value="<%= locals.formData ? (formData.payment || '') : '' %>" placeholder="Payment code or number">
+
+        <label>Front view image</label>
+        <input type="file" name="front_image" accept="image/*" required>
+
+        <label>Back view image</label>
+        <input type="file" name="back_image" accept="image/*" required>
+
+        <label>Left side view image</label>
+        <input type="file" name="left_image" accept="image/*" required>
+
+        <label>Right side view image</label>
+        <input type="file" name="right_image" accept="image/*" required>
+
+        <label>Top/bottom view image</label>
+        <input type="file" name="top_image" accept="image/*" required>
+        <p class="hint">Upload one image per view so buyers can see each side of the product clearly.</p>
+
+        <button type="submit">Upload Product</button>
+    </form>
+
+    <div class="payment-info">
+        <h3>Listing fee</h3>
+        <p>Send UGX 5,000 to the following mobile money details before uploading your product.</p>
+        <p><strong>MTN:</strong> +256 763480495</p>
+        <p><strong>AIRTEL:</strong> +256 741257369</p>
+    </div>
+</main>
+</body>
+</html>

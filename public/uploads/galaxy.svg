@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="screen2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="50%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="#f1f5f9"/>
+  <!-- Phone Body -->
+  <rect x="115" y="35" width="170" height="330" rx="24" fill="#0f172a" stroke="#475569" stroke-width="4"/>
+  <!-- Screen -->
+  <rect x="123" y="45" width="154" height="310" rx="16" fill="url(#screen2)"/>
+  <!-- Punch hole camera -->
+  <circle cx="200" cy="65" r="5" fill="#0f172a"/>
+  <!-- Text -->
+  <text x="200" y="200" fill="#ffffff" font-family="system-ui, sans-serif" font-size="16" font-weight="bold" text-anchor="middle">Samsung Galaxy S22</text>
+  <text x="200" y="225" fill="#f8fafc" font-family="system-ui, sans-serif" font-size="13" text-anchor="middle">Ultra 256GB</text>
+</svg>
