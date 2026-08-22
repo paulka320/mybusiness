@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>In-App Direct Messages | EasyMarket Uganda</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+<%- include('header') %>
+<main class="section" style="max-width: 1100px;">
+    <div class="section-heading">
+        <div>
+            <h2>💬 In-App Direct Messaging</h2>
+            <p>Communicate directly on EasyMarket or switch to WhatsApp anytime.</p>
+        </div>
+    </div>
+
+    <div class="chat-app-layout">
+        <!-- Conversations Sidebar -->
+        <aside class="chat-sidebar">
+            <div class="chat-sidebar-header">
+                <h3>Conversations</h3>
+            </div>
+            <div class="chat-conversations-list">
+                <% if (!conversations || conversations.length === 0) { %>
+                    <div style="padding: 24px; text-align: center; color: #64748b; font-size: 13px;">
+                        No conversation threads yet. When you message a seller or buyer, chats will appear here.
+                    </div>
+                <% } else { %>
+                    <% conversations.forEach(function(c) { %>
+                        <a href="messages.php?to=<%= c.counterpartyId %>" class="conversation-item <%= (locals.counterparty && locals.counterparty.id == c.counterpartyId) ? 'active' : '' %>">
+                            <div class="conv-avatar">
+                                <%= (c.counterpartyName || 'U').charAt(0).toUpperCase() %>
+                            </div>
+                            <div class="conv-info">
+                                <div class="conv-top">
+                                    <strong><%= c.counterpartyName %></strong>
+                                    <% if (c.unreadCount > 0) { %>
+                                        <span class="unread-pill"><%= c.unreadCount %></span>
+                                    <% } %>
+                                </div>
+                                <div class="conv-last-msg">
+                                    <%= c.lastMessage %>
+                                </div>
+                            </div>
+                        </a>
+                    <% }); %>
+                <% } %>
+            </div>
+        </aside>
+
+        <!-- Active Chat Window -->
+        <section class="chat-main-window">
+            <% if (locals.counterparty) { %>
+                <!-- Chat Header with WhatsApp Bridge -->
+                <div class="chat-window-header">
+                    <div class="chat-user-meta">
+                        <div class="conv-avatar" style="width: 40px; height: 40px; font-size: 16px;">
+                            <%= (counterparty.name || 'U').charAt(0).toUpperCase() %>
+                        </div>
+                        <div>
+                            <h3 style="margin: 0; font-size: 15px;"><%= counterparty.name %></h3>
+                            <span style="font-size: 12px; color: #16a34a;">● Available on EasyMarket</span>
+                        </div>
+                    </div>
+
+                    <!-- WhatsApp Switcher Button -->
+                    <% if (counterparty.whatsapp_number) { %>
+                        <% const waUrl = `https://wa.me/${db.sanitizeWhatsAppNumber(counterparty.whatsapp_number)}?text=${encodeURIComponent('Hello! Continuing our conversation from EasyMarket Uganda.')}`; %>
+                        <a href="<%= waUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm">
+                            <span>💬 Switch to WhatsApp</span>
+                        </a>
+                    <% } %>
+                </div>
+
+                <!-- Product Reference Card if chatting about an item -->
+                <% if (locals.activeProduct) { %>
+                    <div class="chat-product-banner">
+                        <img src="uploads/<%= activeProduct.image %>" alt="<%= activeProduct.title %>">
+                        <div>
+                            <strong><%= activeProduct.title %></strong>
+                            <div style="color: #ff5e62; font-weight: 700; font-size: 13px;">
+                                UGX <%= Number(activeProduct.price).toLocaleString() %>
+                            </div>
+                        </div>
+                        <a href="product.php?id=<%= activeProduct.id %>" class="btn-view-listing">View Listing</a>
+                    </div>
+                <% } %>
+
+                <!-- Messages Stream -->
+                <div class="chat-messages-container" id="chat-messages-container">
+                    <% if (!activeMessages || activeMessages.length === 0) { %>
+                        <div class="empty-chat-prompt">
+                            <span>👋</span>
+                            <p>Send a message to start the conversation with <%= counterparty.name %>.</p>
+                        </div>
+                    <% } else { %>
+                        <% activeMessages.forEach(function(msg) { %>
+                            <div class="message-row <%= msg.sender_id === userId ? 'message-outgoing' : 'message-incoming' %>">
+                                <div class="message-bubble">
+                                    <p class="message-text"><%= msg.message %></p>
+                                    <span class="message-timestamp">
+                                        <%= new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) %>
+                                    </span>
+                                </div>
+                            </div>
+                        <% }); %>
+                    <% } %>
+                </div>
+
+                <!-- Message Input Composer -->
+                <form class="chat-composer-form" method="POST" action="messages.php" id="chat-composer">
+                    <input type="hidden" name="receiver_id" value="<%= counterparty.id %>">
+                    <% if (locals.activeProduct) { %>
+                        <input type="hidden" name="product_id" value="<%= activeProduct.id %>">
+                    <% } %>
+                    <input type="text" name="message" id="chat-input-text" placeholder="Type your message to <%= counterparty.name %>..." autocomplete="off" required>
+                    <button type="submit" class="btn-send-msg" id="btn-send-msg">Send 🚀</button>
+                </form>
+            <% } else { %>
+                <div class="empty-chat-prompt" style="margin: auto;">
+                    <span style="font-size: 48px; display: block; margin-bottom: 12px;">💬</span>
+                    <h3>Select a conversation</h3>
+                    <p>Or open any product listing to message the seller directly.</p>
+                    <a href="index.php" class="btn-primary" style="display: inline-block; margin-top: 12px;">Browse Listings</a>
+                </div>
+            <% } %>
+        </section>
+    </div>
+</main>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const container = document.getElementById('chat-messages-container');
+    if (container) {
+        container.scrollTop = container.scrollHeight;
+    }
+});
+</script>
+</body>
+</html>

@@ -1,20 +1,46 @@
 <header class="site-header">
     <div class="top-bar">
-        <a class="logo" href="index.php">EasyMarket</a>
+        <a class="logo" href="index.php" id="site-logo">
+            <span style="color: #ff5e62;">Easy</span><span>Market</span>
+            <span style="font-size: 11px; background: #22c55e; color: white; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 4px; font-weight: 600;">UG</span>
+        </a>
         <nav class="main-nav">
-            <a href="index.php">Home</a>
-            <a href="upload.php">Sell</a>
-            <a href="cart.php">Cart <span id="cart-count">0</span></a>
+            <a href="index.php" id="nav-home">Home</a>
+            <a href="upload.php" id="nav-sell" class="nav-sell-btn">
+                <span>➕ Sell Product</span>
+                <span class="ai-pill-tag">✨ AI</span>
+            </a>
+            <a href="cart.php" id="nav-cart">Cart <span id="cart-count">0</span></a>
+            
             <% if (locals.user && locals.user.id) { %>
-                <a href="orders.php">My Orders</a>
+                <a href="messages.php" id="nav-messages" class="nav-badge-link" title="Direct In-App Messages">
+                    💬 Messages
+                    <% if (locals.unreadMsgsCount > 0) { %>
+                        <span class="nav-counter"><%= locals.unreadMsgsCount %></span>
+                    <% } %>
+                </a>
+
+                <a href="notifications.php" id="nav-notifs" class="nav-badge-link" title="Notifications & Marketplace Rules">
+                    🔔 Alerts
+                    <% if (locals.unreadNotifsCount > 0) { %>
+                        <span class="nav-counter notif-dot"><%= locals.unreadNotifsCount %></span>
+                    <% } %>
+                </a>
+
+                <a href="orders.php" id="nav-orders">My Orders</a>
+                <a href="support.php" id="nav-support">Support</a>
+
                 <% if (locals.user.is_admin == 1) { %>
-                    <a href="admin_dashboard.php">Admin</a>
+                    <a href="admin_dashboard.php" id="nav-admin" class="nav-admin-badge">⚡ Admin Suite</a>
                 <% } %>
-                <a href="logout.php">Logout</a>
-                <span class="nav-user">Hi, <%= locals.user.name %></span>
+
+                <span class="nav-user-greeting">👤 <%= locals.user.name %></span>
+                <a href="logout.php" id="nav-logout-btn" class="nav-logout-btn">🚪 Logout</a>
             <% } else { %>
-                <a href="login.php">Login</a>
-                <a href="register.php">Register</a>
+                <a href="support.php" id="nav-support">Help Center</a>
+                <a href="login.php" id="nav-login">Login</a>
+                <a href="register.php" id="nav-register" class="nav-register-btn">Register</a>
+                <a href="admin_login.php" id="nav-admin-login" class="nav-admin-portal">Admin Portal</a>
             <% } %>
         </nav>
     </div>

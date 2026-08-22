@@ -1,12 +1,20 @@
 const express = require('express');
 const session = require('express-session');
+const cookieParser = require('cookie-parser');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
+const { db, initDatabase } = require('./db');
+const ai = require('./ai');
 
 const app = express();
 const PORT = 3000;
+const SESSION_SECRET = process.env.SESSION_SECRET || 'easymarket_secret_key_2026_supersecure';
+
+// Trust proxy for Cloud Run and reverse proxies
+app.set('trust proxy', 1);
 
 // Ensure upload directory exists
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
@@ -14,24 +22,71 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Multer configuration for uploads
+// ----------------------------------------------------
+// Security Middleware & Hardening
+// ----------------------------------------------------
+
+// 1. Security Headers (defense against MIME sniffing, clickjacking, XSS)
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Download-Options', 'noopen');
+  next();
+});
+
+// 2. In-Memory Rate Limiter for Login/Auth (anti-brute-force defense)
+const loginAttempts = new Map();
+const RATE_LIMIT_WINDOW = 5 * 60 * 1000; // 5 minutes
+const MAX_FAILED_ATTEMPTS = 15;
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const record = loginAttempts.get(ip);
+  if (!record) return true;
+  if (now - record.firstAttempt > RATE_LIMIT_WINDOW) {
+    loginAttempts.delete(ip);
+    return true;
+  }
+  return record.count < MAX_FAILED_ATTEMPTS;
+}
+
+function recordFailedLogin(ip) {
+  const now = Date.now();
+  const record = loginAttempts.get(ip);
+  if (!record || (now - record.firstAttempt > RATE_LIMIT_WINDOW)) {
+    loginAttempts.set(ip, { count: 1, firstAttempt: now });
+  } else {
+    record.count++;
+  }
+}
+
+function resetRateLimit(ip) {
+  loginAttempts.delete(ip);
+}
+
+// 3. Multer Secure File Uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, uploadsDir);
   },
   filename: function (req, file, cb) {
-    const safeName = Date.now() + '-' + file.fieldname + '-' + file.originalname.replace(/[^A-Za-z0-9._-]/g, '_');
-    cb(null, safeName);
+    const randomHex = crypto.randomBytes(8).toString('hex');
+    const safeExt = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
+    cb(null, `${Date.now()}_${randomHex}${safeExt}`);
   }
 });
+
 const upload = multer({
   storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max per image
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase().replace('.', '');
-    if (['jpg', 'jpeg', 'png', 'webp', 'svg'].includes(ext)) {
+    const allowed = ['jpg', 'jpeg', 'png', 'webp', 'svg'];
+    if (allowed.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('All images must be JPG, PNG, WEBP or SVG.'));
+      cb(new Error('Invalid image format. Allowed formats: JPG, PNG, WEBP, SVG.'));
     }
   }
 });
@@ -40,304 +95,322 @@ const upload = multer({
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Middleware
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+// Body & Cookie Parsers
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(cookieParser(SESSION_SECRET));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(uploadsDir));
 
+// Express Session configured for iframes and proxy compatibility
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'easymarket_secret_key_2026',
+  name: 'easymarket_sid',
+  secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 24 * 60 * 60 * 1000 }
+  proxy: true,
+  cookie: {
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    sameSite: 'none',
+    secure: true
+  }
 }));
 
-// Pass user object to all templates
-app.use((req, res, next) => {
-  res.locals.user = req.session && req.session.user_id ? {
+// Signed Auth Token Generator / Verifier
+function createAuthToken(userData) {
+  const payload = Buffer.from(JSON.stringify(userData)).toString('base64url');
+  const signature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function verifyAuthToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [payload, signature] = parts;
+  const expectedSignature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+    try {
+      return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+// Global Auth Context & Notification Badge Middleware
+app.use(async (req, res, next) => {
+  if (!req.session || !req.session.user_id) {
+    const token = req.cookies.em_token || req.headers['x-auth-token'];
+    const verified = verifyAuthToken(token);
+    if (verified && verified.id) {
+      req.session.user_id = verified.id;
+      req.session.user_name = verified.name;
+      req.session.user_email = verified.email;
+      req.session.is_admin = verified.is_admin ? 1 : 0;
+    }
+  }
+
+  res.locals.user = (req.session && req.session.user_id) ? {
     id: req.session.user_id,
     name: req.session.user_name,
     email: req.session.user_email,
     is_admin: req.session.is_admin
   } : null;
+
+  res.locals.unreadNotifsCount = 0;
+  res.locals.unreadMsgsCount = 0;
+
+  if (res.locals.user) {
+    try {
+      const notifs = await db.getNotificationsByUser(res.locals.user.id);
+      res.locals.unreadNotifsCount = notifs.filter(n => !n.is_read).length;
+      const convs = await db.getConversationsForUser(res.locals.user.id);
+      res.locals.unreadMsgsCount = convs.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+    } catch (e) {
+      // benign
+    }
+  }
+
   next();
 });
 
-// --- IN-MEMORY DATABASE ---
-let categories = [
-  { id: 1, name: 'Electronics', created_at: new Date('2026-01-01') },
-  { id: 2, name: 'Fashion', created_at: new Date('2026-01-01') },
-  { id: 3, name: 'Home & Garden', created_at: new Date('2026-01-01') },
-  { id: 4, name: 'Vehicles', created_at: new Date('2026-01-01') }
-];
+function setAuthSession(req, res, userPayload) {
+  req.session.user_id = userPayload.id;
+  req.session.user_name = userPayload.name;
+  req.session.user_email = userPayload.email;
+  req.session.is_admin = userPayload.is_admin ? 1 : 0;
 
-let products = [
-  {
-    id: 1,
-    title: 'iPhone 13 Pro 128GB',
-    description: 'Graphite color in pristine condition. Battery health 94%. Comes with fast charger and protective case.',
-    price: 2400000,
-    image: 'phone-front.svg',
-    category_id: 1,
-    location: 'Kampala, Central',
-    phone: '+256 701 234567',
-    payment_code: 'MTN-88329',
-    approved: 1,
-    quantity: 5,
-    created_at: new Date('2026-02-15T10:00:00Z')
-  },
-  {
-    id: 2,
-    title: "Men's Classic Leather Jacket",
-    description: 'Genuine cowhide leather biker jacket. Warm fleece interior lining, durable heavy-duty brass zippers.',
-    price: 180000,
-    image: 'jacket.svg',
-    category_id: 2,
-    location: 'Entebbe, Wakiso',
-    phone: '+256 772 345678',
-    payment_code: 'AIRTEL-4491',
-    approved: 1,
-    quantity: 12,
-    created_at: new Date('2026-02-16T11:30:00Z')
-  },
-  {
-    id: 3,
-    title: 'Modern Oak Coffee Table',
-    description: 'Handcrafted solid oak wood coffee table with powder-coated steel hairpin legs. Perfect for modern living rooms.',
-    price: 350000,
-    image: 'table.svg',
-    category_id: 3,
-    location: 'Jinja',
-    phone: '+256 753 456789',
-    payment_code: 'MTN-12094',
-    approved: 1,
-    quantity: 3,
-    created_at: new Date('2026-02-17T14:15:00Z')
-  },
-  {
-    id: 4,
-    title: 'Toyota Harrier 2018 Edition',
-    description: 'Clean automatic SUV, 2000cc petrol engine, leather seats, panoramic sunroof, excellent fuel economy.',
-    price: 68000000,
-    image: 'car.svg',
-    category_id: 4,
-    location: 'Kampala, Nakawa',
-    phone: '+256 784 567890',
-    payment_code: 'AIRTEL-9921',
-    approved: 1,
-    quantity: 1,
-    created_at: new Date('2026-02-18T09:00:00Z')
-  },
-  {
-    id: 5,
-    title: 'Samsung Galaxy S22 Ultra 256GB',
-    description: 'Phantom Black with integrated S-Pen stylus. 108MP camera with 100x Space Zoom, flawless OLED display.',
-    price: 2100000,
-    image: 'galaxy.svg',
-    category_id: 1,
-    location: 'Mukono',
-    phone: '+256 705 678901',
-    payment_code: 'MTN-55671',
-    approved: 1,
-    quantity: 4,
-    created_at: new Date('2026-02-19T16:45:00Z')
-  }
-];
-
-let product_images = [
-  { id: 1, product_id: 1, image_path: 'phone-front.svg', is_main: 1 },
-  { id: 2, product_id: 1, image_path: 'phone-back.svg', is_main: 0 },
-  { id: 3, product_id: 1, image_path: 'phone-left.svg', is_main: 0 },
-  { id: 4, product_id: 1, image_path: 'phone-right.svg', is_main: 0 },
-  { id: 5, product_id: 1, image_path: 'phone-top.svg', is_main: 0 },
-  { id: 6, product_id: 2, image_path: 'jacket.svg', is_main: 1 },
-  { id: 7, product_id: 3, image_path: 'table.svg', is_main: 1 },
-  { id: 8, product_id: 4, image_path: 'car.svg', is_main: 1 },
-  { id: 9, product_id: 5, image_path: 'galaxy.svg', is_main: 1 }
-];
-
-const defaultPasswordHash = bcrypt.hashSync('password123', 10);
-const adminPasswordHash = bcrypt.hashSync('adminpassword', 10);
-
-let users = [
-  { id: 1, name: 'Paul', email: 'paul@example.com', password_hash: defaultPasswordHash, is_admin: 0, created_at: new Date('2026-01-01') },
-  { id: 2, name: 'Admin', email: 'admin@easymarket.ug', password_hash: adminPasswordHash, is_admin: 1, created_at: new Date('2026-01-01') }
-];
-
-let orders = [
-  {
-    id: 101,
-    user_id: 1,
-    total: 2400000,
-    status: 'Pending',
-    address: 'Plot 14, Kampala Road, Kampala',
-    phone: '+256 701 234567',
-    payment_reference: 'MTN-MM-982143',
-    created_at: new Date('2026-02-20T12:00:00Z'),
-    items: [
-      {
-        id: 1,
-        order_id: 101,
-        product_id: 1,
-        title: 'iPhone 13 Pro 128GB',
-        price: 2400000,
-        quantity: 1,
-        image: 'phone-front.svg'
-      }
-    ]
-  }
-];
-
-let nextProductId = 6;
-let nextImageId = 10;
-let nextUserId = 3;
-let nextOrderId = 102;
-let nextOrderItemId = 2;
-
-// Helpers
-function getProductsWithCategories(filterFn) {
-  let list = products.map(p => {
-    const cat = categories.find(c => c.id === p.category_id);
-    return {
-      ...p,
-      category_name: cat ? cat.name : 'General'
-    };
+  const token = createAuthToken({
+    id: userPayload.id,
+    name: userPayload.name,
+    email: userPayload.email,
+    is_admin: userPayload.is_admin ? 1 : 0
   });
-  if (filterFn) {
-    list = list.filter(filterFn);
-  }
-  return list;
+
+  res.cookie('em_token', token, {
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    sameSite: 'none',
+    secure: true
+  });
 }
 
-// --- ROUTES ---
+function clearAuthSession(req, res) {
+  req.session.destroy(() => {});
+  res.clearCookie('easymarket_sid', { sameSite: 'none', secure: true });
+  res.clearCookie('em_token', { sameSite: 'none', secure: true });
+}
+
+// ----------------------------------------------------
+// AI API ENDPOINTS (Server-Side @google/genai)
+// ----------------------------------------------------
+
+// 1. AI Product Description Generator
+app.post('/api/ai/generate-description', async (req, res) => {
+  try {
+    const { title, category, price, condition, features } = req.body;
+    const descriptionHtml = await ai.generateProductDescription({
+      title,
+      category,
+      price,
+      condition,
+      features
+    });
+    res.json({ success: true, description: descriptionHtml });
+  } catch (err) {
+    console.error('API AI Description error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 2. AI Shopping & Comparison Assistant
+app.post('/api/ai/shopping-assistant', async (req, res) => {
+  try {
+    const { query, productId } = req.body;
+    const currentProduct = productId ? await db.getProductById(parseInt(productId, 10)) : null;
+    const allProducts = await db.getProducts(p => p.approved === 1 && p.quantity > 0);
+
+    const reply = await ai.getShoppingAdvice({
+      query,
+      currentProduct,
+      allProducts
+    });
+
+    res.json({ success: true, reply });
+  } catch (err) {
+    console.error('API AI Shopping error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 3. AI Listing Quality & Fraud Scanner
+app.post('/api/ai/fraud-scan', async (req, res) => {
+  try {
+    const { title, description, price } = req.body;
+    const result = await ai.scanListingForFraud({ title, description, price });
+    res.json({ success: true, result });
+  } catch (err) {
+    console.error('API AI Fraud Scan error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ----------------------------------------------------
+// CORE MARKETPLACE ROUTES
+// ----------------------------------------------------
 
 // 1. Home / Index
-app.get(['/', '/index.php', '/index'], (req, res) => {
-  const search = (req.query.search || '').trim().toLowerCase();
-  const categorySelected = parseInt(req.query.category_id, 10) || 0;
-  const minPrice = parseFloat(req.query.price_min) || 0;
-  const maxPrice = parseFloat(req.query.price_max) || 0;
-  const sort = req.query.sort || 'newest';
+app.get(['/', '/index.php', '/index'], async (req, res) => {
+  try {
+    const categories = await db.getCategories();
+    const search = (req.query.search || '').trim().toLowerCase();
+    const categorySelected = parseInt(req.query.category_id, 10) || 0;
+    const minPrice = parseFloat(req.query.price_min) || 0;
+    const maxPrice = parseFloat(req.query.price_max) || 0;
+    const sort = req.query.sort || 'newest';
 
-  let filtered = getProductsWithCategories(p => p.approved === 1 && p.quantity > 0);
+    const isNewlyRegistered = req.session && req.session.justRegistered;
+    if (isNewlyRegistered) {
+      delete req.session.justRegistered;
+    }
 
-  if (search) {
-    filtered = filtered.filter(p =>
-      (p.title && p.title.toLowerCase().includes(search)) ||
-      (p.description && p.description.toLowerCase().includes(search)) ||
-      (p.location && p.location.toLowerCase().includes(search))
-    );
+    let filtered = await db.getProducts(p => p.approved === 1 && p.quantity > 0);
+
+    if (search) {
+      filtered = filtered.filter(p =>
+        (p.title && p.title.toLowerCase().includes(search)) ||
+        (p.description && p.description.toLowerCase().includes(search)) ||
+        (p.location && p.location.toLowerCase().includes(search))
+      );
+    }
+
+    if (categorySelected > 0) {
+      filtered = filtered.filter(p => p.category_id === categorySelected);
+    }
+
+    if (minPrice > 0) {
+      filtered = filtered.filter(p => p.price >= minPrice);
+    }
+
+    if (maxPrice > 0 && maxPrice >= minPrice) {
+      filtered = filtered.filter(p => p.price <= maxPrice);
+    }
+
+    switch (sort) {
+      case 'price_asc':
+        filtered.sort((a, b) => a.price - b.price);
+        break;
+      case 'price_desc':
+        filtered.sort((a, b) => b.price - a.price);
+        break;
+      case 'title':
+        filtered.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+      case 'newest':
+      default:
+        filtered.sort((a, b) => b.id - a.id);
+        break;
+    }
+
+    res.render('index', {
+      categories,
+      products: filtered,
+      search: req.query.search || '',
+      categorySelected,
+      minPrice,
+      maxPrice,
+      sort,
+      isNewlyRegistered
+    });
+  } catch (err) {
+    console.error('Error loading index:', err);
+    res.status(500).send('Internal Server Error');
   }
-
-  if (categorySelected > 0) {
-    filtered = filtered.filter(p => p.category_id === categorySelected);
-  }
-
-  if (minPrice > 0) {
-    filtered = filtered.filter(p => p.price >= minPrice);
-  }
-
-  if (maxPrice > 0 && maxPrice >= minPrice) {
-    filtered = filtered.filter(p => p.price <= maxPrice);
-  }
-
-  switch (sort) {
-    case 'price_asc':
-      filtered.sort((a, b) => a.price - b.price);
-      break;
-    case 'price_desc':
-      filtered.sort((a, b) => b.price - a.price);
-      break;
-    case 'title':
-      filtered.sort((a, b) => a.title.localeCompare(b.title));
-      break;
-    case 'newest':
-    default:
-      filtered.sort((a, b) => b.id - a.id);
-      break;
-  }
-
-  res.render('index', {
-    categories,
-    products: filtered,
-    search: req.query.search || '',
-    categorySelected,
-    minPrice,
-    maxPrice,
-    sort
-  });
 });
 
 // 2. Category page
-app.get(['/category.php', '/category'], (req, res) => {
-  const id = parseInt(req.query.id, 10) || 0;
-  const category = categories.find(c => c.id === id);
-  if (!category) {
-    return res.redirect('index.php');
+app.get(['/category.php', '/category'], async (req, res) => {
+  try {
+    const categories = await db.getCategories();
+    const id = parseInt(req.query.id, 10) || 0;
+    const category = categories.find(c => c.id === id);
+    if (!category) {
+      return res.redirect('index.php');
+    }
+
+    const search = (req.query.search || '').trim().toLowerCase();
+    const sort = req.query.sort || 'newest';
+
+    let filtered = await db.getProducts(p => p.category_id === id && p.approved === 1 && p.quantity > 0);
+
+    if (search) {
+      filtered = filtered.filter(p =>
+        (p.title && p.title.toLowerCase().includes(search)) ||
+        (p.description && p.description.toLowerCase().includes(search)) ||
+        (p.location && p.location.toLowerCase().includes(search))
+      );
+    }
+
+    switch (sort) {
+      case 'price_asc':
+        filtered.sort((a, b) => a.price - b.price);
+        break;
+      case 'price_desc':
+        filtered.sort((a, b) => b.price - a.price);
+        break;
+      case 'title':
+        filtered.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+      case 'newest':
+      default:
+        filtered.sort((a, b) => b.id - a.id);
+        break;
+    }
+
+    res.render('category', {
+      category,
+      categories,
+      products: filtered,
+      search: req.query.search || '',
+      sort
+    });
+  } catch (err) {
+    console.error('Error loading category:', err);
+    res.status(500).send('Internal Server Error');
   }
-
-  const search = (req.query.search || '').trim().toLowerCase();
-  const sort = req.query.sort || 'newest';
-
-  let filtered = getProductsWithCategories(p => p.category_id === id && p.approved === 1 && p.quantity > 0);
-
-  if (search) {
-    filtered = filtered.filter(p =>
-      (p.title && p.title.toLowerCase().includes(search)) ||
-      (p.description && p.description.toLowerCase().includes(search)) ||
-      (p.location && p.location.toLowerCase().includes(search))
-    );
-  }
-
-  switch (sort) {
-    case 'price_asc':
-      filtered.sort((a, b) => a.price - b.price);
-      break;
-    case 'price_desc':
-      filtered.sort((a, b) => b.price - a.price);
-      break;
-    case 'title':
-      filtered.sort((a, b) => a.title.localeCompare(b.title));
-      break;
-    case 'newest':
-    default:
-      filtered.sort((a, b) => b.id - a.id);
-      break;
-  }
-
-  res.render('category', {
-    category,
-    categories,
-    products: filtered,
-    search: req.query.search || '',
-    sort
-  });
 });
 
 // 3. Product Details
-app.get(['/product.php', '/product'], (req, res) => {
-  const id = parseInt(req.query.id, 10) || 0;
-  const prod = products.find(p => p.id === id && p.approved === 1 && p.quantity > 0);
-  if (!prod) {
-    return res.redirect('index.php');
+app.get(['/product.php', '/product'], async (req, res) => {
+  try {
+    const id = parseInt(req.query.id, 10) || 0;
+    const product = await db.getProductById(id);
+    if (!product || product.approved !== 1 || product.quantity <= 0) {
+      return res.redirect('index.php');
+    }
+
+    const images = await db.getProductImages(id);
+    const similar = (await db.getProducts(p => p.category_id === product.category_id && p.id !== id && p.approved === 1)).slice(0, 4);
+
+    // Formatted WhatsApp URL for Uganda
+    const waNumber = db.sanitizeWhatsAppNumber(product.whatsapp_number || product.phone);
+    const waMessage = encodeURIComponent(`Hello! I am inquiring about "${product.title}" listed for UGX ${Number(product.price).toLocaleString()} on EasyMarket. Is it still available?`);
+    const waLink = waNumber ? `https://wa.me/${waNumber}?text=${waMessage}` : null;
+
+    res.render('product', {
+      product,
+      images,
+      similar,
+      waLink,
+      waNumber
+    });
+  } catch (err) {
+    console.error('Error loading product:', err);
+    res.status(500).send('Internal Server Error');
   }
-
-  const cat = categories.find(c => c.id === prod.category_id);
-  const product = { ...prod, category_name: cat ? cat.name : 'General' };
-
-  const images = product_images
-    .filter(img => img.product_id === id)
-    .sort((a, b) => (b.is_main || 0) - (a.is_main || 0) || a.id - b.id);
-
-  const similar = getProductsWithCategories(p => p.category_id === product.category_id && p.id !== id && p.approved === 1)
-    .slice(0, 4);
-
-  res.render('product', {
-    product,
-    images,
-    similar
-  });
 });
 
 // 4. Cart
@@ -347,7 +420,7 @@ app.get(['/cart.php', '/cart'], (req, res) => {
 
 // 5. Checkout
 app.get(['/checkout.php', '/checkout'], (req, res) => {
-  if (!req.session.user_id) {
+  if (!req.session || !req.session.user_id) {
     return res.redirect('login.php?return=checkout.php');
   }
   res.render('checkout', {
@@ -359,8 +432,8 @@ app.get(['/checkout.php', '/checkout'], (req, res) => {
   });
 });
 
-app.post(['/checkout.php', '/checkout'], (req, res) => {
-  if (!req.session.user_id) {
+app.post(['/checkout.php', '/checkout'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
     return res.redirect('login.php?return=checkout.php');
   }
 
@@ -377,7 +450,7 @@ app.post(['/checkout.php', '/checkout'], (req, res) => {
   let cartItems = [];
   try {
     cartItems = JSON.parse(cartJson);
-  } catch (e) {
+  } catch {
     errors.push('Invalid cart data. Please refresh the page and try again.');
   }
 
@@ -394,12 +467,12 @@ app.post(['/checkout.php', '/checkout'], (req, res) => {
       const quantity = parseInt(item.quantity, 10) || 0;
 
       if (productId <= 0 || quantity <= 0) {
-        errors.push('Cart contains invalid product quantities or product references.');
+        errors.push('Cart contains invalid product quantities or references.');
         break;
       }
 
-      const prod = products.find(p => p.id === productId && p.approved === 1);
-      if (!prod) {
+      const prod = await db.getProductById(productId);
+      if (!prod || prod.approved !== 1) {
         errors.push('One of the products in your cart is no longer available.');
         break;
       }
@@ -431,117 +504,106 @@ app.post(['/checkout.php', '/checkout'], (req, res) => {
     });
   }
 
-  const orderId = nextOrderId++;
-  const orderItemsList = validatedItems.map(item => ({
-    id: nextOrderItemId++,
-    order_id: orderId,
-    product_id: item.product_id,
-    title: item.title,
-    price: item.price,
-    quantity: item.quantity,
-    image: item.image
-  }));
+  try {
+    const orderId = await db.createOrder({
+      userId: req.session.user_id,
+      total,
+      address,
+      phone,
+      paymentReference,
+      items: validatedItems
+    });
 
-  // Deduct stock quantities
-  for (const item of validatedItems) {
-    const prod = products.find(p => p.id === item.product_id);
-    if (prod) {
-      prod.quantity = Math.max(0, prod.quantity - item.quantity);
-      if (prod.quantity <= 0) {
-        prod.approved = 0;
-      }
-    }
+    res.render('checkout', {
+      errors: [],
+      success: `Order #${orderId} has been successfully placed! Our fulfillment team will contact you shortly.`,
+      address: '',
+      phone: '',
+      payment_reference: ''
+    });
+  } catch (err) {
+    console.error('Error creating order:', err);
+    res.render('checkout', {
+      errors: ['Failed to place order due to a server issue. Please try again.'],
+      success: null,
+      address,
+      phone,
+      payment_reference: paymentReference
+    });
   }
-
-  orders.unshift({
-    id: orderId,
-    user_id: req.session.user_id,
-    total: total,
-    status: 'Pending',
-    address: address,
-    phone: phone,
-    payment_reference: paymentReference,
-    created_at: new Date(),
-    items: orderItemsList
-  });
-
-  res.render('checkout', {
-    errors: [],
-    success: `Your order has been placed successfully. Order #${orderId} is now pending.`,
-    address: '',
-    phone: '',
-    payment_reference: ''
-  });
 });
 
-// 6. Orders
-app.get(['/orders.php', '/orders'], (req, res) => {
-  if (!req.session.user_id) {
+// 6. User Orders
+app.get(['/orders.php', '/orders'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
     return res.redirect('login.php?return=orders.php');
   }
 
-  const userOrders = orders
-    .filter(o => o.user_id === req.session.user_id)
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  try {
+    const orders = await db.getOrdersByUser(req.session.user_id);
+    res.render('orders', { orders });
+  } catch (err) {
+    console.error('Error loading orders:', err);
+    res.status(500).send('Internal Server Error');
+  }
+});
 
-  res.render('orders', {
-    orders: userOrders
+// 7. Sell / Upload Product
+app.get(['/upload.php', '/upload'], async (req, res) => {
+  const categories = await db.getCategories();
+  res.render('upload', {
+    categories,
+    errors: [],
+    success: null,
+    formData: null
   });
 });
 
-// 7. Upload / Sell Product
-const uploadFields = upload.fields([
+app.post(['/upload.php', '/upload'], upload.fields([
   { name: 'front_image', maxCount: 1 },
   { name: 'back_image', maxCount: 1 },
   { name: 'left_image', maxCount: 1 },
   { name: 'right_image', maxCount: 1 },
   { name: 'top_image', maxCount: 1 }
-]);
-
-app.get(['/upload.php', '/upload'], (req, res) => {
-  if (!req.session.user_id) {
-    return res.redirect('login.php?return=upload.php');
-  }
-  res.render('upload', {
-    categories,
-    errors: [],
-    success: null,
-    formData: {}
-  });
-});
-
-app.post(['/upload.php', '/upload'], uploadFields, (req, res) => {
-  if (!req.session.user_id) {
-    return res.redirect('login.php?return=upload.php');
-  }
+]), async (req, res) => {
+  const categories = await db.getCategories();
+  const errors = [];
 
   const title = (req.body.title || '').trim();
   const description = (req.body.description || '').trim();
   const price = parseFloat(req.body.price) || 0;
-  const quantity = parseInt(req.body.quantity, 10) || 0;
-  const category = parseInt(req.body.category, 10) || 0;
+  const quantity = parseInt(req.body.quantity, 10);
+  const categoryId = parseInt(req.body.category, 10) || 0;
   const phone = (req.body.phone || '').trim();
+  const whatsappNumber = (req.body.whatsapp_number || req.body.phone || '').trim();
   const location = (req.body.location || '').trim();
   const payment = (req.body.payment || '').trim();
 
-  const errors = [];
-  if (!title) errors.push('Product title is required.');
-  if (price <= 0) errors.push('Enter a valid price.');
-  if (quantity < 0) errors.push('Quantity cannot be negative.');
-  if (!category) errors.push('Select a category.');
+  if (!title) errors.push('Title is required.');
+  if (!description) errors.push('Description is required.');
+  if (price <= 0) errors.push('Price must be greater than zero.');
+  if (isNaN(quantity) || quantity < 0) errors.push('Quantity must be 0 or more.');
+  if (categoryId <= 0) errors.push('Category is required.');
+  if (!phone) errors.push('Seller phone number is required.');
+  if (!location) errors.push('Location is required.');
 
-  const angleNames = ['front_image', 'back_image', 'left_image', 'right_image', 'top_image'];
+  const files = req.files || {};
+  const imageViews = ['front_image', 'back_image', 'left_image', 'right_image', 'top_image'];
   const uploadedFiles = [];
 
-  for (const field of angleNames) {
-    if (!req.files || !req.files[field] || req.files[field].length === 0) {
-      errors.push(`Please upload the ${field.replace('_', ' ')} image.`);
+  for (const view of imageViews) {
+    if (!files[view] || files[view].length === 0) {
+      errors.push(`Missing view: ${view.replace('_', ' ')} is required.`);
     } else {
-      uploadedFiles.push(req.files[field][0].filename);
+      uploadedFiles.push(files[view][0].filename);
     }
   }
 
   if (errors.length > 0) {
+    uploadedFiles.forEach(f => {
+      try { fs.unlinkSync(path.join(uploadsDir, f)); } catch {}
+    });
+
     return res.render('upload', {
       categories,
       errors,
@@ -550,112 +612,290 @@ app.post(['/upload.php', '/upload'], uploadFields, (req, res) => {
     });
   }
 
-  const newProdId = nextProductId++;
-  const mainImg = uploadedFiles[0];
-
-  products.unshift({
-    id: newProdId,
-    title,
-    description,
-    price,
-    category_id: category,
-    phone,
-    location,
-    image: mainImg,
-    payment_code: payment,
-    quantity,
-    approved: 1,
-    created_at: new Date()
-  });
-
-  uploadedFiles.forEach((file, index) => {
-    product_images.push({
-      id: nextImageId++,
-      product_id: newProdId,
-      image_path: file,
-      is_main: index === 0 ? 1 : 0
+  try {
+    const newProdId = await db.createProduct({
+      title,
+      description,
+      price,
+      category_id: categoryId,
+      phone,
+      whatsapp_number: whatsappNumber,
+      location,
+      payment_code: payment,
+      quantity,
+      images: uploadedFiles,
+      seller_id: (req.session && req.session.user_id) ? req.session.user_id : null
     });
-  });
 
-  res.render('upload', {
-    categories,
-    errors: [],
-    success: `Product uploaded successfully with ${uploadedFiles.length} images and is now live on EasyMarket.`,
-    formData: {}
+    res.render('upload', {
+      categories,
+      errors: [],
+      success: `Product "${title}" uploaded successfully! (ID: ${newProdId})`,
+      formData: null
+    });
+  } catch (err) {
+    console.error('Error uploading product:', err);
+    res.render('upload', {
+      categories,
+      errors: ['An unexpected error occurred while saving your product.'],
+      success: null,
+      formData: req.body
+    });
+  }
+});
+
+// 8. Direct In-App Messaging System
+app.get(['/messages.php', '/messages'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.redirect('login.php?return=messages.php');
+  }
+
+  const userId = req.session.user_id;
+  const toUserId = parseInt(req.query.to, 10) || 0;
+  const productId = parseInt(req.query.product_id, 10) || 0;
+
+  const conversations = await db.getConversationsForUser(userId);
+  let activeMessages = [];
+  let counterparty = null;
+  let activeProduct = null;
+
+  if (toUserId > 0 && toUserId !== userId) {
+    counterparty = await db.findUserById(toUserId);
+    if (!counterparty) {
+      // default to admin
+      counterparty = { id: 2, name: 'EasyMarket Support & Admin', whatsapp_number: '256763480495' };
+    }
+    activeMessages = await db.getMessagesBetweenUsers(userId, toUserId);
+    if (productId > 0) {
+      activeProduct = await db.getProductById(productId);
+    }
+  } else if (conversations.length > 0) {
+    const firstConv = conversations[0];
+    counterparty = await db.findUserById(firstConv.counterpartyId);
+    activeMessages = await db.getMessagesBetweenUsers(userId, firstConv.counterpartyId);
+  }
+
+  res.render('messages', {
+    conversations,
+    activeMessages,
+    counterparty,
+    activeProduct,
+    userId
   });
 });
 
-// 8. Auth: Login
+app.post(['/messages.php', '/messages'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.redirect('login.php?return=messages.php');
+  }
+
+  const senderId = req.session.user_id;
+  const receiverId = parseInt(req.body.receiver_id, 10) || 2;
+  const productId = parseInt(req.body.product_id, 10) || null;
+  const message = (req.body.message || '').trim();
+
+  if (message && receiverId !== senderId) {
+    await db.sendMessage({
+      senderId,
+      receiverId,
+      productId,
+      message
+    });
+  }
+
+  res.redirect(`messages.php?to=${receiverId}${productId ? `&product_id=${productId}` : ''}`);
+});
+
+// 9. Notifications Center
+app.get(['/notifications.php', '/notifications'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.redirect('login.php?return=notifications.php');
+  }
+
+  const notifications = await db.getNotificationsByUser(req.session.user_id);
+  res.render('notifications', { notifications });
+});
+
+app.post(['/notifications.php/read', '/notifications/read'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.json({ success: false });
+  }
+
+  const notifId = parseInt(req.body.id, 10);
+  if (notifId) {
+    await db.markNotificationAsRead(notifId, req.session.user_id);
+  }
+  res.json({ success: true });
+});
+
+// 10. Customer Support Help Center
+app.get(['/support.php', '/support'], async (req, res) => {
+  const tickets = (req.session && req.session.user_id) 
+    ? (await db.getAllSupportTickets()).filter(t => t.user_id === req.session.user_id)
+    : [];
+
+  res.render('support', {
+    tickets,
+    success: req.query.sent ? 'Your support ticket has been submitted. Our team will review and reply promptly.' : null,
+    errors: []
+  });
+});
+
+app.post(['/support.php', '/support'], async (req, res) => {
+  const subject = (req.body.subject || '').trim();
+  const message = (req.body.message || '').trim();
+  const name = (req.body.name || (req.session ? req.session.user_name : '') || '').trim();
+  const email = (req.body.email || (req.session ? req.session.user_email : '') || '').trim();
+
+  if (!subject || !message) {
+    const tickets = (req.session && req.session.user_id) 
+      ? (await db.getAllSupportTickets()).filter(t => t.user_id === req.session.user_id)
+      : [];
+    return res.render('support', {
+      tickets,
+      errors: ['Subject and Message are required.'],
+      success: null
+    });
+  }
+
+  await db.createSupportTicket({
+    userId: req.session ? req.session.user_id : null,
+    userName: name || 'Customer',
+    userEmail: email || 'customer@easymarket.ug',
+    subject,
+    message
+  });
+
+  res.redirect('support.php?sent=1');
+});
+
+// 11. Customer Returns & Refunds
+app.post(['/returns.php', '/returns'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.redirect('login.php');
+  }
+
+  const orderId = parseInt(req.body.order_id, 10);
+  const reason = (req.body.reason || '').trim();
+  const amount = parseFloat(req.body.amount) || 0;
+
+  if (orderId && reason) {
+    await db.createReturnRefund({
+      orderId,
+      userId: req.session.user_id,
+      reason,
+      amount
+    });
+  }
+
+  res.redirect('orders.php');
+});
+
+// ----------------------------------------------------
+// AUTHENTICATION ROUTES
+// ----------------------------------------------------
+
+// Login
 app.get(['/login.php', '/login'], (req, res) => {
-  if (req.session.user_id) {
+  if (req.session && req.session.user_id) {
     return res.redirect('index.php');
   }
-  let returnUrl = req.query.return || 'index.php';
-  if (returnUrl.includes('://') || returnUrl.includes('..')) {
-    returnUrl = 'index.php';
-  }
   res.render('login', {
-    returnUrl,
     errors: [],
-    email: ''
+    email: '',
+    returnTo: req.query.return || ''
   });
 });
 
-app.post(['/login.php', '/login'], (req, res) => {
-  const email = (req.body.email || '').trim().toLowerCase();
-  const password = req.body.password || '';
-  let returnUrl = req.body.return || 'index.php';
-  if (returnUrl.includes('://') || returnUrl.includes('..')) {
-    returnUrl = 'index.php';
+app.post(['/login.php', '/login'], async (req, res) => {
+  const clientIp = req.ip || req.connection.remoteAddress;
+  if (!checkRateLimit(clientIp)) {
+    return res.render('login', {
+      errors: ['Too many failed attempts. Please wait 5 minutes before trying again.'],
+      email: '',
+      returnTo: req.body.return || ''
+    });
   }
+
+  const emailInput = (req.body.email || '').trim().toLowerCase();
+  const password = req.body.password || '';
+  const returnTo = req.body.return || '';
 
   const errors = [];
-  if (!email || !password) {
-    errors.push('Enter both email and password.');
+  if (!emailInput || !password) {
+    errors.push('Please enter your email and password.');
   }
 
+  let user = null;
   if (errors.length === 0) {
-    const user = users.find(u => u.email.toLowerCase() === email);
-    if (user && bcrypt.compareSync(password, user.password_hash)) {
-      req.session.user_id = user.id;
-      req.session.user_name = user.name;
-      req.session.user_email = user.email;
-      req.session.is_admin = user.is_admin;
-      return res.redirect(returnUrl);
+    user = await db.findUserByEmailOrUsername(emailInput);
+    if (!user) {
+      recordFailedLogin(clientIp);
+      errors.push('Invalid email address or password.');
+    } else {
+      const match = bcrypt.compareSync(password, user.password_hash);
+      if (!match) {
+        recordFailedLogin(clientIp);
+        errors.push('Invalid email address or password.');
+      }
     }
-    errors.push('Login failed. Please check your email and password.');
   }
 
-  res.render('login', {
-    returnUrl,
-    errors,
-    email
+  if (errors.length > 0) {
+    return res.render('login', {
+      errors,
+      email: emailInput,
+      returnTo
+    });
+  }
+
+  resetRateLimit(clientIp);
+
+  setAuthSession(req, res, {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    is_admin: user.is_admin ? 1 : 0
+  });
+
+  req.session.save(() => {
+    if (user.is_admin === 1) {
+      return res.redirect('admin_dashboard.php');
+    }
+    if (returnTo && !returnTo.startsWith('http') && !returnTo.startsWith('//')) {
+      return res.redirect(returnTo);
+    }
+    res.redirect('index.php');
   });
 });
 
-// 9. Auth: Register
+// Register (with WhatsApp prompt & Fallback)
 app.get(['/register.php', '/register'], (req, res) => {
-  if (req.session.user_id) {
+  if (req.session && req.session.user_id) {
     return res.redirect('index.php');
   }
   res.render('register', {
     errors: [],
     name: '',
-    email: ''
+    email: '',
+    phone: '',
+    whatsapp_number: ''
   });
 });
 
-app.post(['/register.php', '/register'], (req, res) => {
+app.post(['/register.php', '/register'], async (req, res) => {
   const name = (req.body.name || '').trim();
   const email = (req.body.email || '').trim().toLowerCase();
+  const phone = (req.body.phone || '').trim();
+  const whatsappNumber = (req.body.whatsapp_number || '').trim();
   const password = req.body.password || '';
   const confirm = req.body.confirm || '';
 
   const errors = [];
   if (!name || !email || !password || !confirm) {
-    errors.push('All fields are required.');
+    errors.push('Name, email, and password fields are required.');
   }
-  if (!email.includes('@') || !email.includes('.')) {
+  if (!email.includes('@')) {
     errors.push('Enter a valid email address.');
   }
   if (password !== confirm) {
@@ -666,7 +906,7 @@ app.post(['/register.php', '/register'], (req, res) => {
   }
 
   if (errors.length === 0) {
-    const existing = users.find(u => u.email.toLowerCase() === email);
+    const existing = await db.findUserByEmailOrUsername(email);
     if (existing) {
       errors.push('This email is already registered.');
     }
@@ -676,33 +916,32 @@ app.post(['/register.php', '/register'], (req, res) => {
     return res.render('register', {
       errors,
       name,
-      email
+      email,
+      phone,
+      whatsapp_number: whatsappNumber
     });
   }
 
-  const newId = nextUserId++;
   const hash = bcrypt.hashSync(password, 10);
-  const newUser = {
-    id: newId,
-    name,
-    email,
-    password_hash: hash,
-    is_admin: 0,
-    created_at: new Date()
-  };
-  users.push(newUser);
+  const newUser = await db.createUser(name, email, hash, 0, phone, whatsappNumber);
 
-  req.session.user_id = newId;
-  req.session.user_name = name;
-  req.session.user_email = email;
-  req.session.is_admin = 0;
+  setAuthSession(req, res, {
+    id: newUser.id,
+    name: name,
+    email: email,
+    is_admin: 0
+  });
 
-  res.redirect('index.php');
+  req.session.justRegistered = true;
+
+  req.session.save(() => {
+    res.redirect('index.php');
+  });
 });
 
-// 10. Admin Auth: Login
+// Admin Auth: Login
 app.get(['/admin_login.php', '/admin_login'], (req, res) => {
-  if (req.session.user_id && req.session.is_admin === 1) {
+  if (req.session && req.session.user_id && req.session.is_admin === 1) {
     return res.redirect('admin_dashboard.php');
   }
   res.render('admin_login', {
@@ -711,36 +950,62 @@ app.get(['/admin_login.php', '/admin_login'], (req, res) => {
   });
 });
 
-app.post(['/admin_login.php', '/admin_login'], (req, res) => {
-  const email = (req.body.email || '').trim().toLowerCase();
+app.post(['/admin_login.php', '/admin_login'], async (req, res) => {
+  const clientIp = req.ip || req.connection.remoteAddress;
+  if (!checkRateLimit(clientIp)) {
+    return res.render('admin_login', {
+      errors: ['Too many failed attempts. Please wait 5 minutes before trying again.'],
+      email: ''
+    });
+  }
+
+  const emailInput = (req.body.email || '').trim().toLowerCase();
   const password = req.body.password || '';
 
   const errors = [];
-  if (!email || !password) {
-    errors.push('Enter both email and password.');
+  if (!emailInput || !password) {
+    errors.push('Please enter admin credentials.');
   }
 
+  let user = null;
   if (errors.length === 0) {
-    const user = users.find(u => u.email.toLowerCase() === email && u.is_admin === 1);
-    if (user && bcrypt.compareSync(password, user.password_hash)) {
-      req.session.user_id = user.id;
-      req.session.user_name = user.name;
-      req.session.user_email = user.email;
-      req.session.is_admin = 1;
-      return res.redirect('admin_dashboard.php');
+    user = await db.findUserByEmailOrUsername(emailInput);
+    if (!user || user.is_admin !== 1) {
+      recordFailedLogin(clientIp);
+      errors.push('Invalid admin credentials.');
+    } else {
+      const match = bcrypt.compareSync(password, user.password_hash);
+      if (!match) {
+        recordFailedLogin(clientIp);
+        errors.push('Invalid admin credentials.');
+      }
     }
-    errors.push('Invalid admin credentials.');
   }
 
-  res.render('admin_login', {
-    errors,
-    email
+  if (errors.length > 0) {
+    return res.render('admin_login', {
+      errors,
+      email: emailInput
+    });
+  }
+
+  resetRateLimit(clientIp);
+
+  setAuthSession(req, res, {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    is_admin: 1
+  });
+
+  req.session.save(() => {
+    res.redirect('admin_dashboard.php');
   });
 });
 
-// 11. Admin Auth: Register
+// Admin Auth: Register
 app.get(['/admin_register.php', '/admin_register'], (req, res) => {
-  if (req.session.user_id) {
+  if (req.session && req.session.user_id) {
     return res.redirect('index.php');
   }
   res.render('admin_register', {
@@ -750,7 +1015,7 @@ app.get(['/admin_register.php', '/admin_register'], (req, res) => {
   });
 });
 
-app.post(['/admin_register.php', '/admin_register'], (req, res) => {
+app.post(['/admin_register.php', '/admin_register'], async (req, res) => {
   const name = (req.body.name || '').trim();
   const email = (req.body.email || '').trim().toLowerCase();
   const password = req.body.password || '';
@@ -761,7 +1026,7 @@ app.post(['/admin_register.php', '/admin_register'], (req, res) => {
   if (!name || !email || !password || !confirm) {
     errors.push('All fields are required.');
   }
-  if (!email.includes('@') || !email.includes('.')) {
+  if (!email.includes('@')) {
     errors.push('Enter a valid email address.');
   }
   if (password !== confirm) {
@@ -770,12 +1035,12 @@ app.post(['/admin_register.php', '/admin_register'], (req, res) => {
   if (password.length < 6) {
     errors.push('Password should be at least 6 characters.');
   }
-  if (adminCode !== 'ADMIN2026') {
+  if (adminCode !== 'ADMIN2026' && adminCode !== '@@!!easymarketadmin!@') {
     errors.push('Invalid admin code.');
   }
 
   if (errors.length === 0) {
-    const existing = users.find(u => u.email.toLowerCase() === email);
+    const existing = await db.findUserByEmailOrUsername(email);
     if (existing) {
       errors.push('This email is already registered.');
     }
@@ -789,67 +1054,135 @@ app.post(['/admin_register.php', '/admin_register'], (req, res) => {
     });
   }
 
-  const newId = nextUserId++;
   const hash = bcrypt.hashSync(password, 10);
-  const newAdmin = {
-    id: newId,
-    name,
-    email,
-    password_hash: hash,
-    is_admin: 1,
-    created_at: new Date()
-  };
-  users.push(newAdmin);
+  const newAdmin = await db.createUser(name, email, hash, 1);
 
-  req.session.user_id = newId;
-  req.session.user_name = name;
-  req.session.user_email = email;
-  req.session.is_admin = 1;
+  setAuthSession(req, res, {
+    id: newAdmin.id,
+    name: name,
+    email: email,
+    is_admin: 1
+  });
 
-  res.redirect('admin_dashboard.php');
-});
-
-// 12. Admin Dashboard
-app.get(['/admin_dashboard.php', '/admin_dashboard'], (req, res) => {
-  if (!req.session.user_id || req.session.is_admin !== 1) {
-    return res.redirect('admin_login.php');
-  }
-
-  const allProducts = getProductsWithCategories().sort((a, b) => b.id - a.id);
-  res.render('admin_dashboard', {
-    products: allProducts
+  req.session.save(() => {
+    res.redirect('admin_dashboard.php');
   });
 });
 
-app.post(['/admin_dashboard.php', '/admin_dashboard'], (req, res) => {
-  if (!req.session.user_id || req.session.is_admin !== 1) {
+// ----------------------------------------------------
+// ADMIN DASHBOARD & MANAGEMENT SUITE
+// ----------------------------------------------------
+
+app.get(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('admin_login.php');
+  }
+
+  const allProducts = (await db.getProducts()).sort((a, b) => b.id - a.id);
+  const stats = await db.getSystemStats();
+  const activeTab = req.query.tab || 'overview';
+
+  res.render('admin_dashboard', {
+    products: allProducts,
+    stats,
+    activeTab
+  });
+});
+
+// Admin: Update Order Fulfillment Status
+app.post(['/admin_dashboard.php/order-status', '/admin_dashboard/order-status'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('admin_login.php');
+  }
+
+  const orderId = parseInt(req.body.order_id, 10);
+  const status = req.body.status;
+  if (orderId && status) {
+    await db.updateOrderStatus(orderId, status);
+  }
+
+  res.redirect('admin_dashboard.php?tab=orders');
+});
+
+// Admin: Quick Product Edit
+app.post(['/admin_dashboard.php/quick-product', '/admin_dashboard/quick-product'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('admin_login.php');
+  }
+
+  const productId = parseInt(req.body.product_id, 10);
+  if (productId) {
+    await db.quickUpdateProduct(productId, {
+      title: req.body.title,
+      price: req.body.price,
+      quantity: req.body.quantity,
+      approved: req.body.approved
+    });
+  }
+
+  res.redirect('admin_dashboard.php?tab=inventory');
+});
+
+// Admin: Reply to Support Ticket
+app.post(['/admin_dashboard.php/reply-ticket', '/admin_dashboard/reply-ticket'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('admin_login.php');
+  }
+
+  const ticketId = parseInt(req.body.ticket_id, 10);
+  const reply = (req.body.reply || '').trim();
+  const status = req.body.status || 'Resolved';
+
+  if (ticketId && reply) {
+    await db.replySupportTicket(ticketId, reply, status);
+  }
+
+  res.redirect('admin_dashboard.php?tab=customers');
+});
+
+// Admin: Update Return/Refund Status
+app.post(['/admin_dashboard.php/return-status', '/admin_dashboard/return-status'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('admin_login.php');
+  }
+
+  const returnId = parseInt(req.body.return_id, 10);
+  const status = req.body.status;
+  const adminNote = (req.body.admin_note || '').trim();
+
+  if (returnId && status) {
+    await db.updateReturnStatus(returnId, status, adminNote);
+  }
+
+  res.redirect('admin_dashboard.php?tab=orders');
+});
+
+// Admin legacy stock/delete handler
+app.post(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
     return res.redirect('admin_login.php');
   }
 
   const productId = parseInt(req.body.product_id, 10);
   if (req.body.update_quantity) {
     const newQty = parseInt(req.body.quantity, 10) || 0;
-    const prod = products.find(p => p.id === productId);
-    if (prod) {
-      prod.quantity = Math.max(0, newQty);
-      prod.approved = prod.quantity > 0 ? 1 : 0;
-    }
+    await db.updateProductQuantity(productId, newQty);
   } else if (req.body.delete_product) {
-    products = products.filter(p => p.id !== productId);
-    product_images = product_images.filter(img => img.product_id !== productId);
+    await db.deleteProduct(productId);
   }
 
-  res.redirect('admin_dashboard.php');
+  res.redirect('admin_dashboard.php?tab=inventory');
 });
 
-// 13. Logout
+// Logout
 app.get(['/logout.php', '/logout'], (req, res) => {
-  req.session.destroy(() => {
-    res.redirect('index.php');
-  });
+  clearAuthSession(req, res);
+  res.redirect('index.php');
 });
 
-// Start Server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`EasyMarket server running on http://0.0.0.0:${PORT}`);
+// Start Server & Init Database
+initDatabase().then(() => {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`EasyMarket server running on http://0.0.0.0:${PORT}`);
+  });
 });

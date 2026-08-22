@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sell on EasyMarket</title>
+    <title>Sell on EasyMarket Uganda | AI-Assisted Listing</title>
     <link rel="stylesheet" href="style.css">
     <script src="script.js" defer></script>
 </head>
@@ -11,16 +11,21 @@
 <%- include('header') %>
 <main class="section upload-section">
     <div class="section-heading">
-        <h2>Sell a product</h2>
-        <p>List your item for buyers to discover.</p>
+        <div>
+            <h2>List a Product on EasyMarket</h2>
+            <p>Reach verified buyers across Uganda with 5-angle verified photos and WhatsApp direct contact.</p>
+        </div>
+        <div class="ai-badge-header">
+            <span>✨ Gemini AI Assisted</span>
+        </div>
     </div>
 
     <% if (locals.success) { %>
-        <div class="alert alert-success"><%= success %></div>
+        <div class="alert alert-success" id="upload-success-msg"><%= success %></div>
     <% } %>
 
     <% if (locals.errors && errors.length > 0) { %>
-        <div class="alert alert-error">
+        <div class="alert alert-error" id="upload-error-box">
             <ul>
                 <% errors.forEach(function(error) { %>
                     <li><%= error %></li>
@@ -29,61 +34,160 @@
         </div>
     <% } %>
 
-    <form class="product-form" method="POST" enctype="multipart/form-data" action="upload.php">
-        <label>Title</label>
-        <input type="text" name="title" value="<%= locals.formData ? (formData.title || '') : '' %>" placeholder="Product title" required>
+    <form class="product-form" method="POST" enctype="multipart/form-data" action="upload.php" id="product-upload-form">
+        <label for="prod-title">Product Title</label>
+        <input type="text" id="prod-title" name="title" value="<%= locals.formData ? (formData.title || '') : '' %>" placeholder="e.g. iPhone 13 Pro 128GB Graphite or Men's Leather Jacket" required>
 
-        <label>Description</label>
-        <textarea name="description" placeholder="Product description" required><%= locals.formData ? (formData.description || '') : '' %></textarea>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+            <label for="prod-desc" style="margin: 0;">Description</label>
+            <button type="button" id="btn-ai-generate-desc" class="btn-ai-sparkle">
+                ✨ Auto-Generate with AI
+            </button>
+        </div>
+        <textarea id="prod-desc" name="description" rows="5" placeholder="Detailed product specifications, condition, battery health, accessories included..." required><%= locals.formData ? (formData.description || '') : '' %></textarea>
+        <div id="ai-generating-indicator" style="display: none; font-size: 12px; color: #6366f1; margin-top: 4px;">
+            ⚡ Gemini is crafting an engaging product description...
+        </div>
 
-        <label>Price (UGX)</label>
-        <input type="number" step="0.01" name="price" value="<%= locals.formData ? (formData.price || '') : '' %>" placeholder="Price" required>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div>
+                <label for="prod-price">Price (UGX)</label>
+                <input type="number" id="prod-price" step="100" name="price" value="<%= locals.formData ? (formData.price || '') : '' %>" placeholder="e.g. 250000" required>
+            </div>
+            <div>
+                <label for="prod-qty">Available Stock Quantity</label>
+                <input type="number" id="prod-qty" name="quantity" min="0" value="<%= locals.formData ? (formData.quantity || '') : '1' %>" placeholder="Stock units" required>
+            </div>
+        </div>
 
-        <label>Quantity</label>
-        <input type="number" name="quantity" min="0" value="<%= locals.formData ? (formData.quantity || '') : '' %>" placeholder="Available quantity" required>
-
-        <label>Category</label>
-        <select name="category" required>
-            <option value="">Select a category</option>
+        <label for="prod-cat">Category</label>
+        <select id="prod-cat" name="category" required>
+            <option value="">Select Category</option>
             <% categories.forEach(function(c) { %>
                 <option value="<%= c.id %>" <%= (locals.formData && formData.category == c.id) ? 'selected' : '' %>><%= c.name %></option>
             <% }); %>
         </select>
 
-        <label>Phone</label>
-        <input type="text" name="phone" value="<%= locals.formData ? (formData.phone || '') : '' %>" placeholder="Seller phone" required>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div>
+                <label for="prod-phone">Contact Phone</label>
+                <input type="tel" id="prod-phone" name="phone" value="<%= locals.formData ? (formData.phone || '') : '' %>" placeholder="+256 701 234567" required>
+            </div>
+            <div>
+                <label for="prod-wa">WhatsApp Number (For Direct Buyer Chats)</label>
+                <input type="tel" id="prod-wa" name="whatsapp_number" value="<%= locals.formData ? (formData.whatsapp_number || '') : '' %>" placeholder="256701234567">
+            </div>
+        </div>
 
-        <label>Location</label>
-        <input type="text" name="location" value="<%= locals.formData ? (formData.location || '') : '' %>" placeholder="Location" required>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div>
+                <label for="prod-loc">Location</label>
+                <input type="text" id="prod-loc" name="location" value="<%= locals.formData ? (formData.location || '') : '' %>" placeholder="e.g. Kampala, Nakawa, Jinja" required>
+            </div>
+            <div>
+                <label for="prod-pay">Payment Code / Mobile Money Ref</label>
+                <input type="text" id="prod-pay" name="payment" value="<%= locals.formData ? (formData.payment || '') : '' %>" placeholder="e.g. MTN-88231 or Airtel Merchant">
+            </div>
+        </div>
 
-        <label>Payment Code</label>
-        <input type="text" name="payment" value="<%= locals.formData ? (formData.payment || '') : '' %>" placeholder="Payment code or number">
+        <!-- 5-Angle Verified Photos -->
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin: 16px 0;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                <span style="font-size: 18px;">📸</span>
+                <strong style="color: #1e293b;">Mandatory 5-Angle Verified Images</strong>
+            </div>
+            <p style="font-size: 12px; color: #64748b; margin: 0 0 14px;">
+                To uphold our 10-point authenticity standards, upload clear images showing each perspective of the actual physical product.
+            </p>
 
-        <label>Front view image</label>
-        <input type="file" name="front_image" accept="image/*" required>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+                <div>
+                    <label style="font-size: 12px; font-weight: 600;">1. Front View *</label>
+                    <input type="file" name="front_image" accept="image/*" required style="font-size: 12px;">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: 600;">2. Back View *</label>
+                    <input type="file" name="back_image" accept="image/*" required style="font-size: 12px;">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: 600;">3. Left Side View *</label>
+                    <input type="file" name="left_image" accept="image/*" required style="font-size: 12px;">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: 600;">4. Right Side View *</label>
+                    <input type="file" name="right_image" accept="image/*" required style="font-size: 12px;">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: 600;">5. Top/Bottom View *</label>
+                    <input type="file" name="top_image" accept="image/*" required style="font-size: 12px;">
+                </div>
+            </div>
+        </div>
 
-        <label>Back view image</label>
-        <input type="file" name="back_image" accept="image/*" required>
-
-        <label>Left side view image</label>
-        <input type="file" name="left_image" accept="image/*" required>
-
-        <label>Right side view image</label>
-        <input type="file" name="right_image" accept="image/*" required>
-
-        <label>Top/bottom view image</label>
-        <input type="file" name="top_image" accept="image/*" required>
-        <p class="hint">Upload one image per view so buyers can see each side of the product clearly.</p>
-
-        <button type="submit">Upload Product</button>
+        <button type="submit" id="btn-upload-submit" class="btn-primary" style="width: 100%; padding: 14px; font-size: 15px;">
+            Publish Verified Product Listing
+        </button>
     </form>
 
-    <div class="payment-info">
-        <h3>Listing fee</h3>
-        <p>Send UGX 5,000 to the following mobile money details before uploading your product.</p>
-        <p><strong>MTN:</strong> +256 763480495</p>
-        <p><strong>AIRTEL:</strong> +256 741257369</p>
+    <div class="payment-info" style="margin-top: 28px;">
+        <h3>Listing Verification Fee (UGX 5,000)</h3>
+        <p>To prevent spam and fraudulent listings, send UGX 5,000 listing fee via Mobile Money before approval:</p>
+        <p><strong>MTN Mobile Money:</strong> +256 763 480495 (EasyMarket Merchant)</p>
+        <p><strong>AIRTEL Money:</strong> +256 741 257369 (EasyMarket Merchant)</p>
     </div>
 </main>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const aiBtn = document.getElementById('btn-ai-generate-desc');
+    const titleInput = document.getElementById('prod-title');
+    const catSelect = document.getElementById('prod-cat');
+    const priceInput = document.getElementById('prod-price');
+    const descInput = document.getElementById('prod-desc');
+    const indicator = document.getElementById('ai-generating-indicator');
+
+    if (aiBtn) {
+        aiBtn.addEventListener('click', async () => {
+            const title = titleInput.value.trim();
+            if (!title) {
+                alert('Please enter a product title first (e.g. "iPhone 13 Pro" or "Leather Jacket").');
+                titleInput.focus();
+                return;
+            }
+
+            aiBtn.disabled = true;
+            aiBtn.textContent = '⏳ Writing...';
+            indicator.style.display = 'block';
+
+            try {
+                const res = await fetch('/api/ai/generate-description', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: title,
+                        category: catSelect.options[catSelect.selectedIndex]?.text || '',
+                        price: priceInput.value,
+                        condition: 'Clean / Excellent'
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success && data.description) {
+                    descInput.value = data.description;
+                } else {
+                    alert('AI description generation failed. Please try again.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Network error communicating with Gemini AI.');
+            } finally {
+                aiBtn.disabled = false;
+                aiBtn.textContent = '✨ Auto-Generate with AI';
+                indicator.style.display = 'none';
+            }
+        });
+    }
+});
+</script>
 </body>
 </html>

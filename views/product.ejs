@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= product.title %> | EasyMarket</title>
+    <title><%= product.title %> | EasyMarket Uganda</title>
     <link rel="stylesheet" href="style.css">
     <script src="script.js" defer></script>
 </head>
@@ -13,11 +13,18 @@
     <div class="section-heading">
         <div>
             <h2><%= product.title %></h2>
-            <p><%= product.category_name || 'General' %> · Posted in Uganda</p>
+            <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                <span class="badge-tag"><%= product.category_name || 'General' %></span>
+                <span style="font-size: 13px; color: #64748b;">📍 <%= product.location %> · Verified Uganda Seller</span>
+            </div>
+        </div>
+        <div class="verified-authenticity-badge">
+            <span>🛡️ 10-Point Authenticity Guaranteed</span>
         </div>
     </div>
 
     <div class="product-detail-grid">
+        <!-- 5-Angle Image Gallery & Carousel -->
         <div class="product-detail-image">
             <div class="image-carousel">
                 <% if (images && images.length > 0) { %>
@@ -29,42 +36,99 @@
                 <% } %>
             </div>
             <% if (images && images.length > 1) { %>
-                <button class="carousel-prev">&lt;</button>
-                <button class="carousel-next">&gt;</button>
+                <button class="carousel-prev" aria-label="Previous image">&lt;</button>
+                <button class="carousel-next" aria-label="Next image">&gt;</button>
                 <div class="carousel-indicators">
                     <% for (var i = 0; i < images.length; i++) { %>
                         <button class="indicator<%= i === 0 ? ' active' : '' %>" data-index="<%= i %>"></button>
                     <% } %>
                 </div>
-                <p class="hint">Use arrows to view the product from all angles.</p>
+                <p class="hint">📸 5-Angle Verified Views: Click arrows or dots to examine all perspectives.</p>
             <% } %>
         </div>
+
+        <!-- Product Details, Purchase & Direct Messaging -->
         <div class="product-detail-info">
             <p class="product-detail-price">UGX <%= Number(product.price).toLocaleString() %></p>
+            
             <form class="add-to-cart-form" method="POST" action="">
-                <label>Quantity</label>
-                <input type="number" name="quantity" min="1" max="<%= product.quantity %>" value="1" required>
-                <button type="submit" class="cart-action" data-id="<%= product.id %>" data-title="<%= product.title %>" data-price="<%= product.price %>" data-image="<%= product.image %>">Add to Cart</button>
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
+                    <label style="margin: 0; font-weight: 600;">Quantity:</label>
+                    <input type="number" name="quantity" min="1" max="<%= product.quantity %>" value="1" style="width: 80px; padding: 8px 12px;" required>
+                    <span style="font-size: 13px; color: #16a34a; font-weight: 600;">
+                        <%= product.quantity %> available in stock
+                    </span>
+                </div>
+                <button type="submit" class="cart-action" data-id="<%= product.id %>" data-title="<%= product.title %>" data-price="<%= product.price %>" data-image="<%= product.image %>">
+                    🛒 Add to Cart & Buy Securely
+                </button>
             </form>
 
-            <div class="product-detail-meta">
-                <p><strong>Location:</strong> <%= product.location %></p>
-                <p><strong>Seller Phone:</strong> <%= product.phone %></p>
-                <p><strong>Payment Code:</strong> <%= product.payment_code %></p>
-                <p><strong>Available Quantity:</strong> <%= product.quantity %></p>
+            <!-- WhatsApp & In-App Direct Communication Options -->
+            <div class="seller-contact-card">
+                <div style="font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
+                    Direct Communication with Seller
+                </div>
+                <div class="contact-buttons-group">
+                    <% if (locals.waLink) { %>
+                        <a href="<%= waLink %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp" id="btn-chat-whatsapp">
+                            <span style="font-size: 18px;">💬</span>
+                            <span>Chat on WhatsApp</span>
+                        </a>
+                    <% } %>
+
+                    <a href="messages.php?to=<%= product.seller_id || 2 %>&product_id=<%= product.id %>" class="btn-inapp-msg" id="btn-chat-inapp">
+                        <span style="font-size: 18px;">✉️</span>
+                        <span>In-App Direct Message</span>
+                    </a>
+                </div>
+                <div style="font-size: 12px; color: #64748b; margin-top: 8px;">
+                    📞 Direct Call: <strong><%= product.phone %></strong>
+                </div>
+            </div>
+
+            <div class="product-detail-meta" style="margin-top: 18px;">
+                <p><strong>📍 Delivery / Pickup:</strong> <%= product.location %></p>
+                <p><strong>💳 Payment Code:</strong> <%= product.payment_code || 'Direct MM' %></p>
             </div>
 
             <div class="product-detail-description">
-                <h3>Product Description</h3>
-                <p><%- (product.description || '').replace(/\n/g, '<br>') %></p>
+                <h3>Product Specifications & Details</h3>
+                <div style="line-height: 1.7; color: #334155;">
+                    <%- (product.description || '').replace(/\n/g, '<br>') %>
+                </div>
+            </div>
+
+            <!-- AI Shopping Advisor Interactive Module -->
+            <div class="ai-advisor-panel" id="ai-advisor-panel">
+                <div class="ai-advisor-header">
+                    <span style="font-size: 18px;">🤖</span>
+                    <div>
+                        <strong style="color: #4338ca;">AI Shopping Advisor</strong>
+                        <div style="font-size: 12px; color: #6366f1;">Ask anything about this listing or compare with others</div>
+                    </div>
+                </div>
+                
+                <div class="ai-quick-prompts">
+                    <button type="button" class="ai-prompt-chip" data-prompt="Is this price good value for this model in Uganda?">💰 Price value check?</button>
+                    <button type="button" class="ai-prompt-chip" data-prompt="What should I inspect when picking up this item in person?">🔍 Pickup inspection checklist</button>
+                    <button type="button" class="ai-prompt-chip" data-prompt="Are there similar alternatives available on EasyMarket?">🔄 Compare alternatives</button>
+                </div>
+
+                <div class="ai-input-row">
+                    <input type="text" id="ai-user-query" placeholder="Ask AI assistant a question about this item...">
+                    <button type="button" id="btn-ask-ai" class="btn-ai-send">Ask</button>
+                </div>
+
+                <div id="ai-advisor-response" class="ai-advisor-response" style="display: none;"></div>
             </div>
         </div>
     </div>
 
     <% if (similar && similar.length > 0) { %>
-        <section class="section">
+        <section class="section" style="margin-top: 48px;">
             <div class="section-heading">
-                <h2>More from this category</h2>
+                <h2>Similar Verified Listings in <%= product.category_name || 'Uganda' %></h2>
             </div>
             <div class="products-grid">
                 <% similar.forEach(function(row) { %>
@@ -77,6 +141,7 @@
                                 <h3><%= row.title %></h3>
                                 <div class="product-footer">
                                     <span class="price">UGX <%= Number(row.price).toLocaleString() %></span>
+                                    <span class="location">📍 <%= row.location %></span>
                                 </div>
                             </div>
                         </a>
@@ -86,5 +151,59 @@
         </section>
     <% } %>
 </main>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const askBtn = document.getElementById('btn-ask-ai');
+    const input = document.getElementById('ai-user-query');
+    const responseBox = document.getElementById('ai-advisor-response');
+    const chips = document.querySelectorAll('.ai-prompt-chip');
+
+    async function submitAiQuery(queryText) {
+        if (!queryText.trim()) return;
+        askBtn.disabled = true;
+        askBtn.textContent = 'Thinking...';
+        responseBox.style.display = 'block';
+        responseBox.innerHTML = '<div style="color: #6366f1;">⚡ Consulting EasyMarket AI Knowledge Base...</div>';
+
+        try {
+            const res = await fetch('/api/ai/shopping-assistant', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: queryText,
+                    productId: <%= product.id %>
+                })
+            });
+            const data = await res.json();
+            if (data.success && data.reply) {
+                responseBox.innerHTML = data.reply;
+            } else {
+                responseBox.innerHTML = '<span style="color: #dc2626;">Could not retrieve advice at this moment. Please try again.</span>';
+            }
+        } catch (e) {
+            responseBox.innerHTML = '<span style="color: #dc2626;">Error reaching AI Assistant.</span>';
+        } finally {
+            askBtn.disabled = false;
+            askBtn.textContent = 'Ask';
+        }
+    }
+
+    if (askBtn && input) {
+        askBtn.addEventListener('click', () => submitAiQuery(input.value));
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') submitAiQuery(input.value);
+        });
+    }
+
+    chips.forEach(chip => {
+        chip.addEventListener('click', () => {
+            const prompt = chip.dataset.prompt;
+            input.value = prompt;
+            submitAiQuery(prompt);
+        });
+    });
+});
+</script>
 </body>
 </html>

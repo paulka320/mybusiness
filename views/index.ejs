@@ -10,6 +10,43 @@
 <body>
 <%- include('header') %>
 <main>
+    <% if (locals.isNewlyRegistered) { %>
+    <section class="section" style="margin-top: 20px; margin-bottom: 10px;">
+        <div style="background: #fffbeb; border: 2px solid #f59e0b; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align: left;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 24px;">🛡️</span>
+                    <h3 style="margin: 0; color: #92400e; font-size: 1.2rem;">Account Created: Important Marketplace Integrity Warning</h3>
+                </div>
+                <span style="background: #fef3c7; color: #b45309; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid #fde68a;">Action: Permanent Ban on Fraud</span>
+            </div>
+            
+            <p style="color: #78350f; font-size: 13.5px; line-height: 1.65; margin: 0 0 16px 0;">
+                <strong>Welcome to EasyMarket!</strong> Please be reminded of your legal and ethical obligations under our strict platform rules:
+            </p>
+            
+            <ol style="color: #78350f; font-size: 13px; line-height: 1.65; margin: 0; padding-left: 20px;">
+                <li>EasyMarket enforces a zero-tolerance policy against deceptive listings, fake items, or fraudulent transactions.</li>
+                <li>All sellers must provide 100% accurate, factual descriptions and genuine multi-angle photographs of their physical items.</li>
+                <li>Never advertise items that are damaged, counterfeit, unavailable, or non-functional without explicit disclosure.</li>
+                <li>Falsifying mobile money payments, transaction references, or delivery arrangements is strictly prohibited.</li>
+                <li>Prices quoted must be the exact final price without covert secondary fees or price gouging.</li>
+                <li>Product warranties, conditions (Brand New vs. Used), and specifications must match the delivered product exactly.</li>
+                <li>Any attempt to defraud, cheat, or mislead a client or merchant is immediately flagged by our security monitors.</li>
+                <li>Customers are empowered to report suspicious listings directly to our admin moderation team.</li>
+                <li>Failure to follow these integrity standards will lead to instantaneous cancellation of active listings and freezing of pending payouts.</li>
+                <li><strong>Strict Penalty:</strong> Any seller or buyer found violating these terms will have their account permanently blocked and banned from ever using EasyMarket again.</li>
+            </ol>
+
+            <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
+                <button type="button" onclick="this.closest('section').style.display='none'" style="background: #92400e; color: white; border: none; padding: 8px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px;">
+                    ✓ I Acknowledge & Understand
+                </button>
+            </div>
+        </div>
+    </section>
+    <% } %>
+
     <section class="hero section">
         <div class="hero-copy">
             <span class="eyebrow">Shop with confidence</span>

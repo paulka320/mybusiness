@@ -3,53 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Orders | EasyMarket</title>
+    <title>My Orders & Purchase History | EasyMarket Uganda</title>
     <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
 </head>
 <body>
 <%- include('header') %>
 <main class="section orders-section">
     <div class="section-heading">
-        <h2>My Orders</h2>
-        <p>Review your recent purchases and order details.</p>
+        <div>
+            <h2>📦 My Orders & Purchase History</h2>
+            <p>Track real-time fulfillment status, request returns/refunds, or contact sellers.</p>
+        </div>
     </div>
 
     <% if (orders && orders.length > 0) { %>
         <% orders.forEach(function(order) { %>
-            <section class="order-card">
+            <section class="order-card" id="order-card-<%= order.id %>">
                 <div class="order-card-header">
                     <div>
-                        <h3>Order #<%= order.id %></h3>
-                        <p>Status: <%= order.status %></p>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <h3 style="margin: 0;">Order #<%= order.id %></h3>
+                            <span class="badge-tag" style="
+                                background: <%= order.status === 'Delivered' ? '#dcfce7' : (order.status === 'Cancelled' ? '#fee2e2' : '#fef3c7') %>;
+                                color: <%= order.status === 'Delivered' ? '#166534' : (order.status === 'Cancelled' ? '#991b1b' : '#92400e') %>;
+                                font-weight: 700;">
+                                <%= order.status %>
+                            </span>
+                        </div>
+                        <p style="margin: 4px 0 0; color: #64748b; font-size: 13px;">
+                            Placed on <%= new Date(order.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) %>
+                        </p>
                     </div>
-                    <div>
+                    <div style="text-align: right;">
                         <span class="order-total">UGX <%= Number(order.total).toLocaleString() %></span>
-                        <p><%= new Date(order.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) %></p>
                     </div>
                 </div>
+
                 <div class="order-delivery">
-                    <p><strong>Delivery address:</strong> <%= order.address %></p>
-                    <p><strong>Phone:</strong> <%= order.phone %></p>
-                    <% if (order.payment_reference) { %><p><strong>Payment ref:</strong> <%= order.payment_reference %></p><% } %>
+                    <p><strong>📍 Delivery Address:</strong> <%= order.address %></p>
+                    <p><strong>📞 Contact Phone:</strong> <%= order.phone %></p>
+                    <% if (order.payment_reference) { %>
+                        <p><strong>💳 Payment Ref:</strong> <code><%= order.payment_reference %></code></p>
+                    <% } %>
                 </div>
+
                 <div class="order-items">
                     <% (order.items || []).forEach(function(item) { %>
                         <div class="order-item">
                             <img src="uploads/<%= item.image %>" alt="<%= item.title %>">
-                            <div>
+                            <div style="flex: 1;">
                                 <h4><%= item.title %></h4>
-                                <p>Quantity: <%= item.quantity %></p>
-                                <p>Price: UGX <%= Number(item.price).toLocaleString() %></p>
+                                <p>Quantity: <strong><%= item.quantity %></strong> · Unit Price: UGX <%= Number(item.price).toLocaleString() %></p>
                             </div>
+                            <a href="messages.php?product_id=<%= item.product_id %>" class="btn-inapp-msg" style="padding: 6px 12px; font-size: 12px;">
+                                💬 Message Seller
+                            </a>
                         </div>
                     <% }); %>
+                </div>
+
+                <!-- Order Action Bar (Returns, Refund, WhatsApp Help) -->
+                <div style="padding: 14px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                    <div style="display: flex; gap: 10px;">
+                        <!-- WhatsApp Direct Inquiry with Order Reference -->
+                        <a href="https://wa.me/256763480495?text=<%= encodeURIComponent(`Hello EasyMarket Dispatch, I am inquiring about my Order #${order.id} status.`) %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm">
+                            <span>💬 Track on WhatsApp</span>
+                        </a>
+                    </div>
+
+                    <!-- Return / Refund Request Button & Collapse -->
+                    <% if (order.status !== 'Cancelled') { %>
+                        <details style="font-size: 13px; color: #475569;">
+                            <summary style="cursor: pointer; color: #e11d48; font-weight: 600;">
+                                🔄 Request Return / Refund
+                            </summary>
+                            <form method="POST" action="returns.php" style="margin-top: 12px; background: white; padding: 14px; border-radius: 8px; border: 1px solid #fed7aa;">
+                                <input type="hidden" name="order_id" value="<%= order.id %>">
+                                <input type="hidden" name="amount" value="<%= order.total %>">
+                                <label style="font-weight: 600; font-size: 12px; color: #1e293b;">Reason for Return / Refund Request:</label>
+                                <textarea name="reason" rows="2" placeholder="e.g. Item defective, not matching description, or wrong item received..." style="width: 100%; padding: 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1;" required></textarea>
+                                <button type="submit" class="btn-primary" style="background: #e11d48; margin-top: 8px; font-size: 12px; padding: 8px 14px;">
+                                    Submit Refund Claim (UGX <%= Number(order.total).toLocaleString() %>)
+                                </button>
+                            </form>
+                        </details>
+                    <% } %>
                 </div>
             </section>
         <% }); %>
     <% } else { %>
         <div class="empty-state">
-            <h3>No orders found yet.</h3>
-            <p>Place an order from the marketplace and it will appear here.</p>
+            <span style="font-size: 44px; display: block; margin-bottom: 12px;">🛍️</span>
+            <h3>No orders found yet</h3>
+            <p>Explore products across Kampala and Uganda and complete checkout.</p>
+            <a href="index.php" class="btn-primary" style="display: inline-block; margin-top: 14px;">Browse Products</a>
         </div>
     <% } %>
 </main>

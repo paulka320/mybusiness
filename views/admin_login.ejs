@@ -10,8 +10,8 @@
 <%- include('header') %>
 <main class="section upload-section">
     <div class="section-heading">
-        <h2>Admin Login</h2>
-        <p>Login to manage products.</p>
+        <h2>Admin Portal</h2>
+        <p>Sign in to manage product stock, approvals, and marketplace inventory.</p>
     </div>
 
     <% if (locals.errors && errors.length > 0) { %>
@@ -25,14 +25,31 @@
     <% } %>
 
     <form class="product-form" method="POST" action="admin_login.php">
-        <label>Email</label>
-        <input type="email" name="email" placeholder="you@example.com" value="<%= locals.email || '' %>" required>
+        <label for="admin-email">Username or Email</label>
+        <input type="text" id="admin-email" name="email" placeholder="Enter admin username or email" value="<%= locals.email || '' %>" required autocomplete="username">
 
-        <label>Password</label>
-        <input type="password" name="password" required>
+        <label for="admin-password">Password</label>
+        <div style="position: relative;">
+            <input type="password" id="admin-password" name="password" required autocomplete="current-password" style="width: 100%;">
+            <button type="button" id="toggle-pwd-btn" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #64748b; font-size: 12px; padding: 4px 8px;">Show</button>
+        </div>
 
-        <button type="submit">Login as Admin</button>
+        <button type="submit" id="admin-login-submit" style="margin-top: 16px;">Login as Admin</button>
     </form>
 </main>
+
+<script>
+    const toggleBtn = document.getElementById('toggle-pwd-btn');
+    const pwdInput = document.getElementById('admin-password');
+    toggleBtn?.addEventListener('click', function() {
+        if (pwdInput.type === 'password') {
+            pwdInput.type = 'text';
+            toggleBtn.textContent = 'Hide';
+        } else {
+            pwdInput.type = 'password';
+            toggleBtn.textContent = 'Show';
+        }
+    });
+</script>
 </body>
 </html>

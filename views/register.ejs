@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register | EasyMarket</title>
+    <title>Register | EasyMarket Uganda</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <%- include('header') %>
 <main class="section upload-section">
     <div class="section-heading">
-        <h2>Create your account</h2>
-        <p>Save your cart and complete checkout securely.</p>
+        <h2>Create your EasyMarket account</h2>
+        <p>Connect with buyers & sellers across Uganda via WhatsApp or In-App direct messaging.</p>
     </div>
 
     <% if (locals.errors && errors.length > 0) { %>
-        <div class="alert alert-error">
+        <div class="alert alert-error" id="register-error-box">
             <ul>
                 <% errors.forEach(function(error) { %>
                     <li><%= error %></li>
@@ -24,23 +24,103 @@
         </div>
     <% } %>
 
-    <form class="product-form" method="POST" action="register.php">
-        <label>Name</label>
-        <input type="text" name="name" placeholder="Your name" value="<%= locals.name || '' %>" required>
+    <!-- 10-Point Marketplace Authenticity & Anti-Deception Mandatory Agreement -->
+    <div class="integrity-card" id="integrity-policy-card">
+        <div class="integrity-header">
+            <span style="font-size: 20px;">🛡️</span>
+            <div>
+                <strong>Mandatory 10-Point Marketplace Authenticity & Anti-Deception Policy</strong>
+                <div style="font-size: 11px; color: #9a3412; font-weight: 500;">Please review before completing registration</div>
+            </div>
+        </div>
+        <ol class="integrity-list">
+            <li><strong>Authentic Community Standard:</strong> EasyMarket is dedicated to cultivating an honest, dependable, and transparent shopping environment across Uganda.</li>
+            <li><strong>Zero Tolerance for Deception:</strong> As a registered participant, you are strictly forbidden from submitting false, misleading, counterfeit, or exaggerated product descriptions.</li>
+            <li><strong>True-to-Life 5-Angle Photography:</strong> All mandatory uploaded views (front, back, left, right, top) must feature the real, current condition of the exact item for sale.</li>
+            <li><strong>Accuracy in Specifications:</strong> Misrepresenting model versions, storage, warranty terms, brand provenance, or operational functionality is a serious violation.</li>
+            <li><strong>Inventory Availability:</strong> You must not advertise products that are out of stock, inaccessible, damaged, or cannot be delivered within agreed fulfillment timelines.</li>
+            <li><strong>Payment & Reference Integrity:</strong> All participants must strictly honor pricing and never submit counterfeit mobile money receipts or fraudulent transaction IDs.</li>
+            <li><strong>Transparent Pricing:</strong> Displayed prices must reflect the true total cost with no unannounced hidden fees or arbitrary price inflation after contact.</li>
+            <li><strong>Automated & Manual Auditing:</strong> EasyMarket actively audits product listings with AI verification and investigates customer protection tickets.</li>
+            <li><strong>Immediate Sanctions:</strong> Any user caught defrauding customers or disseminating deceptive claims will be suspended without prior notice.</li>
+            <li><strong>Permanent Platform Ban:</strong> <em>Violation of these terms results in permanent blacklisting and banning of your account and phone number from the EasyMarket ecosystem.</em></li>
+        </ol>
+    </div>
 
-        <label>Email</label>
-        <input type="email" name="email" placeholder="you@example.com" value="<%= locals.email || '' %>" required>
+    <form class="product-form" method="POST" action="register.php" id="register-form">
+        <label for="reg-name">Full Name</label>
+        <input type="text" id="reg-name" name="name" placeholder="e.g. Sarah Namubiru" value="<%= locals.name || '' %>" required>
 
-        <label>Password</label>
-        <input type="password" name="password" required>
+        <label for="reg-email">Email Address</label>
+        <input type="email" id="reg-email" name="email" placeholder="you@example.com" value="<%= locals.email || '' %>" required>
 
-        <label>Confirm Password</label>
-        <input type="password" name="confirm" required>
+        <label for="reg-phone">Phone Number (Calling / Mobile Money)</label>
+        <input type="tel" id="reg-phone" name="phone" placeholder="e.g. +256 701 234567 or 0772 123456" value="<%= locals.phone || '' %>" required>
 
-        <button type="submit">Register</button>
+        <!-- WhatsApp Messaging Integration Prompt -->
+        <div class="whatsapp-prompt-box">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <span style="font-size: 20px;">💬</span>
+                <div>
+                    <strong style="color: #15803d; font-size: 14px;">WhatsApp & Direct Messaging Integration</strong>
+                    <p style="margin: 2px 0 0; font-size: 12px; color: #166534;">
+                        Buyers and sellers can initiate instant 1-click WhatsApp conversations, or use our built-in In-App Messages if you prefer.
+                    </p>
+                </div>
+            </div>
+
+            <div style="margin: 12px 0 8px;">
+                <label for="reg-whatsapp" style="font-size: 13px; font-weight: 600; color: #1e293b;">WhatsApp Number (Recommended)</label>
+                <input type="tel" id="reg-whatsapp" name="whatsapp_number" placeholder="e.g. 0701234567 or 256701234567" value="<%= locals.whatsapp_number || '' %>" style="margin-top: 4px;">
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="sync_phone_wa" style="width: 16px; height: 16px; cursor: pointer;">
+                <label for="sync_phone_wa" style="font-size: 12px; color: #475569; font-weight: normal; margin: 0; cursor: pointer;">
+                    My WhatsApp number is the same as my phone number above
+                </label>
+            </div>
+        </div>
+
+        <label for="reg-password">Password</label>
+        <input type="password" id="reg-password" name="password" placeholder="Minimum 6 characters" required>
+
+        <label for="reg-confirm">Confirm Password</label>
+        <input type="password" id="reg-confirm" name="confirm" placeholder="Re-type password" required>
+
+        <div style="margin: 20px 0; display: flex; align-items: flex-start; gap: 10px; text-align: left; background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <input type="checkbox" id="integrity_agree" required style="margin-top: 3px; cursor: pointer; width: 18px; height: 18px;">
+            <label for="integrity_agree" style="font-size: 13px; color: #334155; font-weight: normal; cursor: pointer; margin: 0; line-height: 1.4;">
+                I hereby acknowledge that I have read and agree to all <strong>10 Points of the EasyMarket Authenticity and Anti-Deception Policy</strong>. I understand that deceiving clients or listing inaccurate products will result in my permanent ban from the system.
+            </label>
+        </div>
+
+        <button type="submit" id="register-submit-btn" class="btn-primary" style="width: 100%;">Create Account & Accept Terms</button>
     </form>
 
-    <p>Already have an account? <a href="login.php">Login here</a>.</p>
+    <p style="text-align: center; margin-top: 20px; color: #64748b;">
+        Already registered? <a href="login.php" style="color: #ff5e62; font-weight: 600;">Sign in to your account</a>
+    </p>
 </main>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const phoneInput = document.getElementById('reg-phone');
+    const waInput = document.getElementById('reg-whatsapp');
+    const syncCheckbox = document.getElementById('sync_phone_wa');
+
+    syncCheckbox.addEventListener('change', () => {
+        if (syncCheckbox.checked) {
+            waInput.value = phoneInput.value;
+        }
+    });
+
+    phoneInput.addEventListener('input', () => {
+        if (syncCheckbox.checked) {
+            waInput.value = phoneInput.value;
+        }
+    });
+});
+</script>
 </body>
 </html>

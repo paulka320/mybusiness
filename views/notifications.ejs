@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notifications & Marketplace Alerts | EasyMarket</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+<%- include('header') %>
+<main class="section" style="max-width: 880px;">
+    <div class="section-heading">
+        <div>
+            <h2>🔔 Your Notifications & Alerts</h2>
+            <p>Important updates on order statuses, community policies, and messages.</p>
+        </div>
+    </div>
+
+    <!-- Persistent Integrity Guarantee Notification Banner -->
+    <div class="integrity-card" style="margin-bottom: 24px;">
+        <div class="integrity-header">
+            <span style="font-size: 20px;">🛡️</span>
+            <div>
+                <strong>EasyMarket Authenticity & Anti-Deception Agreement (Active)</strong>
+                <div style="font-size: 11px; color: #9a3412;">Account Protected under 10-point authenticity guidelines</div>
+            </div>
+        </div>
+        <p style="font-size: 13px; color: #7c2d12; line-height: 1.6; margin: 6px 0 0;">
+            Remember that all products listed or purchased through EasyMarket Uganda must represent truthful descriptions, actual photos, and genuine pricing. Deceptive listings or fraudulent attempts result in an immediate and irreversible ban.
+        </p>
+    </div>
+
+    <% if (!notifications || notifications.length === 0) { %>
+        <div class="empty-state">
+            <span style="font-size: 40px; display: block; margin-bottom: 12px;">📭</span>
+            <h3>No notifications yet</h3>
+            <p>You will receive updates when you place orders, receive messages, or when our team reviews tickets.</p>
+            <a href="index.php" class="btn-primary" style="display: inline-block; margin-top: 14px;">Browse Marketplace</a>
+        </div>
+    <% } else { %>
+        <div class="notifications-list" id="notifications-container">
+            <% notifications.forEach(function(n) { %>
+                <div class="notif-item <%= n.is_read ? 'notif-read' : 'notif-unread' %>" id="notif-<%= n.id %>">
+                    <div class="notif-icon">
+                        <% if (n.type === 'integrity_warning') { %>
+                            🛡️
+                        <% } else if (n.type === 'order_status') { %>
+                            📦
+                        <% } else if (n.type === 'message') { %>
+                            💬
+                        <% } else if (n.type === 'refund') { %>
+                            💸
+                        <% } else if (n.type === 'support') { %>
+                            🎧
+                        <% } else { %>
+                            📢
+                        <% } %>
+                    </div>
+                    <div class="notif-content">
+                        <div class="notif-top">
+                            <h4 class="notif-title"><%= n.title %></h4>
+                            <span class="notif-time">
+                                <%= new Date(n.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) %>
+                            </span>
+                        </div>
+                        <p class="notif-body"><%= n.message %></p>
+                        <div class="notif-actions">
+                            <% if (!n.is_read) { %>
+                                <button class="btn-mark-read" data-id="<%= n.id %>">✓ Mark as Read</button>
+                            <% } %>
+                            <% if (n.type === 'message') { %>
+                                <a href="messages.php" class="btn-notif-link">Open Chat</a>
+                            <% } else if (n.type === 'order_status') { %>
+                                <a href="orders.php" class="btn-notif-link">View Orders</a>
+                            <% } else if (n.type === 'support') { %>
+                                <a href="support.php" class="btn-notif-link">View Ticket</a>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+            <% }); %>
+        </div>
+    <% } %>
+</main>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.btn-mark-read').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            try {
+                const res = await fetch('/notifications.php/read', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const item = document.getElementById(`notif-${id}`);
+                    if (item) {
+                        item.classList.remove('notif-unread');
+                        item.classList.add('notif-read');
+                    }
+                    btn.remove();
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        });
+    });
+});
+</script>
+</body>
+</html>
