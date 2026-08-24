@@ -74,8 +74,13 @@
             </div>
         <% } else { %>
             <div class="empty-state">
-                <h3>No products found in this category.</h3>
-                <p>Try a different search or browse another category.</p>
+                <div class="empty-state-icon">🏷️</div>
+                <h3>No products in <%= category.name %> yet</h3>
+                <p>Be the first merchant to list an item in <%= category.name %> or browse our other categories.</p>
+                <div class="empty-state-actions">
+                    <a href="upload.php" class="btn-primary">➕ Sell in <%= category.name %></a>
+                    <a href="index.php" class="btn-secondary">Browse All</a>
+                </div>
             </div>
         <% } %>
     </section>

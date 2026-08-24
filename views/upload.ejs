@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sell on EasyMarket Uganda | AI-Assisted Listing</title>
+    <title>Sell on EasyMarket Uganda | Verified Product Listing</title>
     <link rel="stylesheet" href="style.css">
     <script src="script.js" defer></script>
 </head>
@@ -14,9 +14,6 @@
         <div>
             <h2>List a Product on EasyMarket</h2>
             <p>Reach verified buyers across Uganda with 5-angle verified photos and WhatsApp direct contact.</p>
-        </div>
-        <div class="ai-badge-header">
-            <span>✨ Gemini AI Assisted</span>
         </div>
     </div>
 
@@ -38,16 +35,8 @@
         <label for="prod-title">Product Title</label>
         <input type="text" id="prod-title" name="title" value="<%= locals.formData ? (formData.title || '') : '' %>" placeholder="e.g. iPhone 13 Pro 128GB Graphite or Men's Leather Jacket" required>
 
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-            <label for="prod-desc" style="margin: 0;">Description</label>
-            <button type="button" id="btn-ai-generate-desc" class="btn-ai-sparkle">
-                ✨ Auto-Generate with AI
-            </button>
-        </div>
+        <label for="prod-desc">Description</label>
         <textarea id="prod-desc" name="description" rows="5" placeholder="Detailed product specifications, condition, battery health, accessories included..." required><%= locals.formData ? (formData.description || '') : '' %></textarea>
-        <div id="ai-generating-indicator" style="display: none; font-size: 12px; color: #6366f1; margin-top: 4px;">
-            ⚡ Gemini is crafting an engaging product description...
-        </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
             <div>
@@ -136,58 +125,5 @@
         <p><strong>AIRTEL Money:</strong> +256 741 257369 (EasyMarket Merchant)</p>
     </div>
 </main>
-
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    const aiBtn = document.getElementById('btn-ai-generate-desc');
-    const titleInput = document.getElementById('prod-title');
-    const catSelect = document.getElementById('prod-cat');
-    const priceInput = document.getElementById('prod-price');
-    const descInput = document.getElementById('prod-desc');
-    const indicator = document.getElementById('ai-generating-indicator');
-
-    if (aiBtn) {
-        aiBtn.addEventListener('click', async () => {
-            const title = titleInput.value.trim();
-            if (!title) {
-                alert('Please enter a product title first (e.g. "iPhone 13 Pro" or "Leather Jacket").');
-                titleInput.focus();
-                return;
-            }
-
-            aiBtn.disabled = true;
-            aiBtn.textContent = '⏳ Writing...';
-            indicator.style.display = 'block';
-
-            try {
-                const res = await fetch('/api/ai/generate-description', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: title,
-                        category: catSelect.options[catSelect.selectedIndex]?.text || '',
-                        price: priceInput.value,
-                        condition: 'Clean / Excellent'
-                    })
-                });
-
-                const data = await res.json();
-                if (data.success && data.description) {
-                    descInput.value = data.description;
-                } else {
-                    alert('AI description generation failed. Please try again.');
-                }
-            } catch (err) {
-                console.error(err);
-                alert('Network error communicating with Gemini AI.');
-            } finally {
-                aiBtn.disabled = false;
-                aiBtn.textContent = '✨ Auto-Generate with AI';
-                indicator.style.display = 'none';
-            }
-        });
-    }
-});
-</script>
 </body>
 </html>

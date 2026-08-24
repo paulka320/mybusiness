@@ -19,7 +19,7 @@
                 <h1 style="margin: 0; font-size: 1.8rem; color: #0f172a;">EasyMarket Admin Command Suite</h1>
             </div>
             <p style="margin: 6px 0 0; color: #64748b; font-size: 14px;">
-                Comprehensive analytics, order fulfillment, inventory alarms, customer insights & AI fraud detection.
+                Comprehensive analytics, order fulfillment, inventory alarms, customer insights & marketplace management.
             </p>
         </div>
         <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
@@ -55,9 +55,6 @@
         </a>
         <a href="admin_dashboard.php?tab=marketing" class="admin-tab-btn <%= (activeTab === 'marketing') ? 'active' : '' %>">
             📢 Marketing & Traffic
-        </a>
-        <a href="admin_dashboard.php?tab=ai-scanner" class="admin-tab-btn <%= (activeTab === 'ai-scanner') ? 'active' : '' %>">
-            🤖 AI Fraud Scanner
         </a>
     </div>
 
@@ -125,8 +122,8 @@
                         <strong class="text-green">PostgreSQL / Supabase Ready</strong>
                     </div>
                     <div class="info-row">
-                        <span>AI Integrity Engine:</span>
-                        <strong class="text-purple">Gemini API Active</strong>
+                        <span>Fraud & Scam Protection:</span>
+                        <strong class="text-green">Active (Multi-Angle Photo Auditing)</strong>
                     </div>
                     <div class="info-row">
                         <span>Brute-force Rate Limiting:</span>
@@ -569,7 +566,7 @@
             <!-- Traffic Sources Breakdown -->
             <div class="admin-card">
                 <h3 class="admin-card-title">🌐 Acquisition & Traffic Sources</h3>
-                <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 10px;">
+                <div style="flex-direction: column; display: flex; gap: 16px; margin-top: 10px;">
                     <% stats.marketing.trafficSources.forEach(function(ts) { %>
                         <div>
                             <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
@@ -586,101 +583,6 @@
         </div>
     </section>
     <% } %>
-
-    <!-- 6. AI FRAUD & QUALITY SCANNER TAB -->
-    <% if (activeTab === 'ai-scanner') { %>
-    <section class="admin-section-block">
-        <div class="admin-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <div>
-                    <h3 class="admin-card-title" style="margin: 0;">🤖 Gemini AI Listing Quality & Fraud Scanner</h3>
-                    <p style="margin: 4px 0 0; font-size: 13px; color: #64748b;">
-                        Run automated AI integrity audits on live marketplace products to detect exaggerated claims or policy violations.
-                    </p>
-                </div>
-            </div>
-
-            <div class="table-responsive">
-                <table class="admin-table">
-                    <thead>
-                        <tr>
-                            <th>Listing</th>
-                            <th>Price (UGX)</th>
-                            <th>Description Snippet</th>
-                            <th>Run AI Fraud Audit</th>
-                            <th>Audit Result</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <% products.forEach(function(p) { %>
-                            <tr>
-                                <td><strong><%= p.title %></strong></td>
-                                <td>UGX <%= Number(p.price).toLocaleString() %></td>
-                                <td><span style="font-size: 12px; color: #64748b;"><%= p.description ? (p.description.substring(0, 45) + '...') : '' %></span></td>
-                                <td>
-                                    <button type="button" class="btn-ai-audit-run btn-ai-sparkle" 
-                                            data-id="<%= p.id %>"
-                                            data-title="<%= p.title %>"
-                                            data-desc="<%= p.description || '' %>"
-                                            data-price="<%= p.price %>">
-                                        ⚡ Scan Listing
-                                    </button>
-                                </td>
-                                <td id="audit-result-<%= p.id %>">
-                                    <span style="color: #94a3b8; font-size: 12px;">Not yet scanned</span>
-                                </td>
-                            </tr>
-                        <% }); %>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </section>
-    <% } %>
 </main>
-
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.btn-ai-audit-run').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const id = btn.dataset.id;
-            const title = btn.dataset.title;
-            const desc = btn.dataset.desc;
-            const price = btn.dataset.price;
-            const resContainer = document.getElementById(`audit-result-${id}`);
-
-            btn.disabled = true;
-            btn.textContent = 'Auditing...';
-            resContainer.innerHTML = '<span style="color: #6366f1; font-size: 12px;">Analyzing with Gemini...</span>';
-
-            try {
-                const res = await fetch('/api/ai/fraud-scan', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title, description: desc, price })
-                });
-                const data = await res.json();
-                if (data.success && data.result) {
-                    const r = data.result;
-                    const color = r.riskLevel === 'LOW' ? '#16a34a' : (r.riskLevel === 'HIGH' ? '#dc2626' : '#d97706');
-                    resContainer.innerHTML = `
-                        <div style="font-size: 12px;">
-                            <strong style="color: ${color};">Risk: ${r.riskLevel} (${r.authenticityScore || 90}/100)</strong>
-                            <div style="color: #475569; font-size: 11px;">${r.summary || 'Listing conforms to Uganda marketplace policies.'}</div>
-                        </div>
-                    `;
-                } else {
-                    resContainer.innerHTML = '<span style="color: #dc2626; font-size: 12px;">Audit failed.</span>';
-                }
-            } catch (e) {
-                resContainer.innerHTML = '<span style="color: #dc2626; font-size: 12px;">Scan error.</span>';
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '⚡ Re-scan';
-            }
-        });
-    });
-});
-</script>
 </body>
 </html>

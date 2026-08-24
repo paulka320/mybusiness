@@ -98,30 +98,6 @@
                     <%- (product.description || '').replace(/\n/g, '<br>') %>
                 </div>
             </div>
-
-            <!-- AI Shopping Advisor Interactive Module -->
-            <div class="ai-advisor-panel" id="ai-advisor-panel">
-                <div class="ai-advisor-header">
-                    <span style="font-size: 18px;">🤖</span>
-                    <div>
-                        <strong style="color: #4338ca;">AI Shopping Advisor</strong>
-                        <div style="font-size: 12px; color: #6366f1;">Ask anything about this listing or compare with others</div>
-                    </div>
-                </div>
-                
-                <div class="ai-quick-prompts">
-                    <button type="button" class="ai-prompt-chip" data-prompt="Is this price good value for this model in Uganda?">💰 Price value check?</button>
-                    <button type="button" class="ai-prompt-chip" data-prompt="What should I inspect when picking up this item in person?">🔍 Pickup inspection checklist</button>
-                    <button type="button" class="ai-prompt-chip" data-prompt="Are there similar alternatives available on EasyMarket?">🔄 Compare alternatives</button>
-                </div>
-
-                <div class="ai-input-row">
-                    <input type="text" id="ai-user-query" placeholder="Ask AI assistant a question about this item...">
-                    <button type="button" id="btn-ask-ai" class="btn-ai-send">Ask</button>
-                </div>
-
-                <div id="ai-advisor-response" class="ai-advisor-response" style="display: none;"></div>
-            </div>
         </div>
     </div>
 
@@ -151,59 +127,5 @@
         </section>
     <% } %>
 </main>
-
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    const askBtn = document.getElementById('btn-ask-ai');
-    const input = document.getElementById('ai-user-query');
-    const responseBox = document.getElementById('ai-advisor-response');
-    const chips = document.querySelectorAll('.ai-prompt-chip');
-
-    async function submitAiQuery(queryText) {
-        if (!queryText.trim()) return;
-        askBtn.disabled = true;
-        askBtn.textContent = 'Thinking...';
-        responseBox.style.display = 'block';
-        responseBox.innerHTML = '<div style="color: #6366f1;">⚡ Consulting EasyMarket AI Knowledge Base...</div>';
-
-        try {
-            const res = await fetch('/api/ai/shopping-assistant', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    query: queryText,
-                    productId: <%= product.id %>
-                })
-            });
-            const data = await res.json();
-            if (data.success && data.reply) {
-                responseBox.innerHTML = data.reply;
-            } else {
-                responseBox.innerHTML = '<span style="color: #dc2626;">Could not retrieve advice at this moment. Please try again.</span>';
-            }
-        } catch (e) {
-            responseBox.innerHTML = '<span style="color: #dc2626;">Error reaching AI Assistant.</span>';
-        } finally {
-            askBtn.disabled = false;
-            askBtn.textContent = 'Ask';
-        }
-    }
-
-    if (askBtn && input) {
-        askBtn.addEventListener('click', () => submitAiQuery(input.value));
-        input.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') submitAiQuery(input.value);
-        });
-    }
-
-    chips.forEach(chip => {
-        chip.addEventListener('click', () => {
-            const prompt = chip.dataset.prompt;
-            input.value = prompt;
-            submitAiQuery(prompt);
-        });
-    });
-});
-</script>
 </body>
 </html>

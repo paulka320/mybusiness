@@ -42,105 +42,9 @@ let memCategories = [
   { id: 4, name: 'Vehicles' }
 ];
 
-let memProducts = [
-  {
-    id: 1,
-    title: 'iPhone 13 Pro 128GB',
-    description: 'Graphite color in pristine condition. Battery health 94%. Comes with fast charger and protective case.',
-    price: 2400000,
-    image: 'phone-front.svg',
-    category_id: 1,
-    location: 'Kampala, Central',
-    phone: '+256 701 234567',
-    whatsapp_number: '256701234567',
-    has_whatsapp: true,
-    payment_code: 'MTN-88329',
-    approved: 1,
-    quantity: 5,
-    seller_id: 2,
-    created_at: new Date('2026-02-15T10:00:00Z')
-  },
-  {
-    id: 2,
-    title: "Men's Classic Leather Jacket",
-    description: 'Genuine cowhide leather biker jacket. Warm fleece interior lining, durable heavy-duty brass zippers.',
-    price: 180000,
-    image: 'jacket.svg',
-    category_id: 2,
-    location: 'Entebbe, Wakiso',
-    phone: '+256 772 345678',
-    whatsapp_number: '256772345678',
-    has_whatsapp: true,
-    payment_code: 'AIRTEL-4491',
-    approved: 1,
-    quantity: 12,
-    seller_id: 1,
-    created_at: new Date('2026-02-16T11:30:00Z')
-  },
-  {
-    id: 3,
-    title: 'Modern Oak Coffee Table',
-    description: 'Handcrafted solid oak wood coffee table with powder-coated steel hairpin legs. Perfect for modern living rooms.',
-    price: 350000,
-    image: 'table.svg',
-    category_id: 3,
-    location: 'Jinja',
-    phone: '+256 753 456789',
-    whatsapp_number: '256753456789',
-    has_whatsapp: true,
-    payment_code: 'MTN-12094',
-    approved: 1,
-    quantity: 2, // Low stock <= 3
-    seller_id: 1,
-    created_at: new Date('2026-02-17T14:15:00Z')
-  },
-  {
-    id: 4,
-    title: 'Toyota Harrier 2018 Edition',
-    description: 'Clean automatic SUV, 2000cc petrol engine, leather seats, panoramic sunroof, excellent fuel economy.',
-    price: 68000000,
-    image: 'car.svg',
-    category_id: 4,
-    location: 'Kampala, Nakawa',
-    phone: '+256 784 567890',
-    whatsapp_number: '256784567890',
-    has_whatsapp: true,
-    payment_code: 'AIRTEL-9921',
-    approved: 1,
-    quantity: 1, // Low stock <= 3
-    seller_id: 2,
-    created_at: new Date('2026-02-18T09:00:00Z')
-  },
-  {
-    id: 5,
-    title: 'Samsung Galaxy S22 Ultra 256GB',
-    description: 'Phantom Black with integrated S-Pen stylus. 108MP camera with 100x Space Zoom, flawless OLED display.',
-    price: 2100000,
-    image: 'galaxy.svg',
-    category_id: 1,
-    location: 'Mukono',
-    phone: '+256 705 678901',
-    whatsapp_number: '256705678901',
-    has_whatsapp: true,
-    payment_code: 'MTN-55671',
-    approved: 1,
-    quantity: 4,
-    seller_id: 2,
-    created_at: new Date('2026-02-19T16:45:00Z')
-  }
-];
+let memProducts = [];
 
-let memProductImages = [
-  { id: 1, product_id: 1, image_path: 'phone-front.svg', is_main: 1 },
-  { id: 2, product_id: 1, image_path: 'phone-back.svg', is_main: 0 },
-  { id: 3, product_id: 1, image_path: 'phone-left.svg', is_main: 0 },
-  { id: 4, product_id: 1, image_path: 'phone-right.svg', is_main: 0 },
-  { id: 5, product_id: 1, image_path: 'phone-top.svg', is_main: 0 },
-  { id: 6, product_id: 2, image_path: 'jacket.svg', is_main: 1 },
-  { id: 7, product_id: 3, image_path: 'table.svg', is_main: 1 },
-  { id: 8, product_id: 4, image_path: 'car.svg', is_main: 1 },
-  { id: 9, product_id: 5, image_path: 'galaxy.svg', is_main: 1 }
-];
+let memProductImages = [];
 
 let memUsers = [
   { 
@@ -167,57 +71,26 @@ let memUsers = [
   }
 ];
 
-let memOrders = [
-  {
-    id: 101,
-    user_id: 1,
-    total: 2400000,
-    status: 'Delivered',
-    address: 'Plot 14, Kampala Road, Kampala',
-    phone: '+256 701 234567',
-    payment_reference: 'MTN-MM-982143',
-    created_at: new Date('2026-02-20T12:00:00Z'),
-    items: [
-      {
-        id: 1,
-        order_id: 101,
-        product_id: 1,
-        title: 'iPhone 13 Pro 128GB',
-        price: 2400000,
-        quantity: 1,
-        image: 'phone-front.svg'
-      }
-    ]
-  },
-  {
-    id: 102,
-    user_id: 1,
-    total: 180000,
-    status: 'Pending',
-    address: 'Plot 14, Kampala Road, Kampala',
-    phone: '+256 701 234567',
-    payment_reference: 'AIRTEL-MM-114920',
-    created_at: new Date('2026-02-22T08:30:00Z'),
-    items: [
-      {
-        id: 2,
-        order_id: 102,
-        product_id: 2,
-        title: "Men's Classic Leather Jacket",
-        price: 180000,
-        quantity: 1,
-        image: 'jacket.svg'
-      }
-    ]
-  }
-];
+let memOrders = [];
+
+const REGISTRATION_INTEGRITY_MESSAGE = 
+  "Welcome to EasyMarket Uganda, your trusted marketplace for buying and selling genuine products across the country. " +
+  "As a registered member, you are strictly required to provide authentic, accurate, and completely truthful information about every product you list. " +
+  "Deceiving, misleading, or presenting counterfeit goods to customers is entirely forbidden on this platform. " +
+  "All product descriptions, specifications, warranty details, and physical conditions must reflect the exact reality of the items offered. " +
+  "Sellers must always upload genuine photographs showcasing the actual condition of their products from multiple angles. " +
+  "You are prohibited from manipulating prices, hiding unannounced fees, or quoting false mobile money transaction codes. " +
+  "Any report or detection of deceptive behavior, scamming, or misrepresentation will be thoroughly investigated by our administrative moderation team. " +
+  "Honest commerce protects both buyers and sellers while fostering a safe and thriving local economy. " +
+  "Failure to comply with these marketplace integrity rules will result in immediate suspension and cancellation of all active listings. " +
+  "The ultimate penalty for deceiving customers is that your account and phone number will be permanently blocked and banned from ever using EasyMarket again.";
 
 let memNotifications = [
   {
     id: 1,
     user_id: 1,
-    title: '🛡️ Marketplace Authenticity Agreement',
-    message: 'Welcome to EasyMarket! Your account is activated under the 10-point anti-deception rules. Genuine listings protect our Uganda community.',
+    title: '🛡️ Mandatory Anti-Deception & Authenticity Policy',
+    message: REGISTRATION_INTEGRITY_MESSAGE,
     type: 'integrity_warning',
     is_read: 0,
     created_at: new Date()
@@ -449,7 +322,7 @@ async function initDatabase() {
         );
       `);
 
-      // Seed categories if empty
+      // Ensure categories exist
       const catCountRes = await client.query('SELECT COUNT(*) FROM categories');
       if (parseInt(catCountRes.rows[0].count, 10) === 0) {
         for (const cat of memCategories) {
@@ -458,17 +331,10 @@ async function initDatabase() {
         await client.query("SELECT setval('categories_id_seq', (SELECT MAX(id) FROM categories))");
       }
 
-      // Seed products if empty
-      const prodCountRes = await client.query('SELECT COUNT(*) FROM products');
-      if (parseInt(prodCountRes.rows[0].count, 10) === 0) {
-        for (const p of memProducts) {
-          await client.query(
-            'INSERT INTO products (id, title, description, price, image, category_id, location, phone, whatsapp_number, payment_code, approved, quantity, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
-            [p.id, p.title, p.description, p.price, p.image, p.category_id, p.location, p.phone, p.whatsapp_number, p.payment_code, p.approved, p.quantity, p.created_at]
-          );
-        }
-        await client.query("SELECT setval('products_id_seq', (SELECT MAX(id) FROM products))");
-      }
+      // Remove existing products as requested
+      await client.query('DELETE FROM order_items');
+      await client.query('DELETE FROM product_images');
+      await client.query('DELETE FROM products');
 
       // Seed admin user
       const userRes = await client.query('SELECT * FROM users WHERE LOWER(email) = $1', [ADMIN_USERNAME.toLowerCase()]);
@@ -731,11 +597,11 @@ const db = {
         [name, email.toLowerCase(), passwordHash, isAdmin, phone, wa, hasWa]
       );
       const user = res.rows[0];
-      // Create initial welcome & integrity notification
+      // Create initial welcome & 10-sentence anti-deception policy notification
       await this.createNotification({
         userId: user.id,
-        title: '🛡️ Marketplace Integrity Agreement',
-        message: 'Welcome to EasyMarket Uganda! Your account is active under the 10-point authenticity rules. Deceptive listings or fraudulent activities are strictly prohibited.',
+        title: '🛡️ Mandatory Anti-Deception & Authenticity Policy',
+        message: REGISTRATION_INTEGRITY_MESSAGE,
         type: 'integrity_warning'
       });
       return user;
@@ -754,11 +620,11 @@ const db = {
     };
     memUsers.push(newUser);
 
-    // Initial welcome notification
+    // Initial welcome & 10-sentence anti-deception policy notification
     this.createNotification({
       userId: newUser.id,
-      title: '🛡️ Marketplace Integrity Agreement',
-      message: 'Welcome to EasyMarket Uganda! Your account is active under the 10-point authenticity rules. Deceptive listings or fraudulent activities are strictly prohibited.',
+      title: '🛡️ Mandatory Anti-Deception & Authenticity Policy',
+      message: REGISTRATION_INTEGRITY_MESSAGE,
       type: 'integrity_warning'
     });
 

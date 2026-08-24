@@ -7,7 +7,6 @@ const fs = require('fs');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const { db, initDatabase } = require('./db');
-const ai = require('./ai');
 
 const app = express();
 const PORT = 3000;
@@ -203,60 +202,6 @@ function clearAuthSession(req, res) {
   res.clearCookie('easymarket_sid', { sameSite: 'none', secure: true });
   res.clearCookie('em_token', { sameSite: 'none', secure: true });
 }
-
-// ----------------------------------------------------
-// AI API ENDPOINTS (Server-Side @google/genai)
-// ----------------------------------------------------
-
-// 1. AI Product Description Generator
-app.post('/api/ai/generate-description', async (req, res) => {
-  try {
-    const { title, category, price, condition, features } = req.body;
-    const descriptionHtml = await ai.generateProductDescription({
-      title,
-      category,
-      price,
-      condition,
-      features
-    });
-    res.json({ success: true, description: descriptionHtml });
-  } catch (err) {
-    console.error('API AI Description error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 2. AI Shopping & Comparison Assistant
-app.post('/api/ai/shopping-assistant', async (req, res) => {
-  try {
-    const { query, productId } = req.body;
-    const currentProduct = productId ? await db.getProductById(parseInt(productId, 10)) : null;
-    const allProducts = await db.getProducts(p => p.approved === 1 && p.quantity > 0);
-
-    const reply = await ai.getShoppingAdvice({
-      query,
-      currentProduct,
-      allProducts
-    });
-
-    res.json({ success: true, reply });
-  } catch (err) {
-    console.error('API AI Shopping error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 3. AI Listing Quality & Fraud Scanner
-app.post('/api/ai/fraud-scan', async (req, res) => {
-  try {
-    const { title, description, price } = req.body;
-    const result = await ai.scanListingForFraud({ title, description, price });
-    res.json({ success: true, result });
-  } catch (err) {
-    console.error('API AI Fraud Scan error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
 // ----------------------------------------------------
 // CORE MARKETPLACE ROUTES
