@@ -52,17 +52,22 @@
         </aside>
 
         <!-- Active Chat Window -->
-        <section class="chat-main-window">
+        <section class="chat-main-window <%= locals.counterparty ? 'has-active-chat' : '' %>">
             <% if (locals.counterparty) { %>
                 <!-- Chat Header with WhatsApp Bridge -->
                 <div class="chat-window-header">
-                    <div class="chat-user-meta">
-                        <div class="conv-avatar" style="width: 40px; height: 40px; font-size: 16px;">
-                            <%= (counterparty.name || 'U').charAt(0).toUpperCase() %>
-                        </div>
-                        <div>
-                            <h3 style="margin: 0; font-size: 15px;"><%= counterparty.name %></h3>
-                            <span style="font-size: 12px; color: #16a34a;">● Available on EasyMarket</span>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <a href="messages.php" class="mobile-back-to-chats-btn" aria-label="Back to conversations list">
+                            ← All Chats
+                        </a>
+                        <div class="chat-user-meta">
+                            <div class="conv-avatar" style="width: 38px; height: 38px; font-size: 15px;">
+                                <%= (counterparty.name || 'U').charAt(0).toUpperCase() %>
+                            </div>
+                            <div>
+                                <h3 style="margin: 0; font-size: 15px; font-weight: 700;"><%= counterparty.name %></h3>
+                                <span style="font-size: 12px; color: #16a34a; font-weight: 600;">● Active on EasyMarket</span>
+                            </div>
                         </div>
                     </div>
 
@@ -70,7 +75,7 @@
                     <% if (counterparty.whatsapp_number) { %>
                         <% const waUrl = `https://wa.me/${db.sanitizeWhatsAppNumber(counterparty.whatsapp_number)}?text=${encodeURIComponent('Hello! Continuing our conversation from EasyMarket Uganda.')}`; %>
                         <a href="<%= waUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm">
-                            <span>💬 Switch to WhatsApp</span>
+                            <span>💬 WhatsApp</span>
                         </a>
                     <% } %>
                 </div>

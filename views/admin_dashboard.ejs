@@ -111,15 +111,19 @@
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-top: 24px;">
             <!-- System Health & Security Status -->
             <div class="admin-card">
-                <h3 class="admin-card-title">🛡️ System Security & Anti-Fraud Shield</h3>
+                <h3 class="admin-card-title">🛡️ System Security & Database Health</h3>
                 <div class="info-list">
+                    <div class="info-row">
+                        <span>Database Status:</span>
+                        <% if (stats.database && stats.database.isConnected) { %>
+                            <strong class="text-green">🟢 Supabase Connected (Persistent)</strong>
+                        <% } else { %>
+                            <strong style="color: #ea580c;">🟡 In-Memory Mode (Add DATABASE_URL to connect Supabase)</strong>
+                        <% } %>
+                    </div>
                     <div class="info-row">
                         <span>Anti-Deception Policy:</span>
                         <strong class="text-green">Enforced (10-Point Agreement Active)</strong>
-                    </div>
-                    <div class="info-row">
-                        <span>Database Architecture:</span>
-                        <strong class="text-green">PostgreSQL / Supabase Ready</strong>
                     </div>
                     <div class="info-row">
                         <span>Fraud & Scam Protection:</span>

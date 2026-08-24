@@ -13,11 +13,38 @@ function saveCart(cart) {
 function updateCartCount() {
     const cart = getCart();
     const count = cart.reduce((sum, item) => sum + item.quantity, 0);
-    const badge = document.getElementById('cart-count');
+    const badgeDesktop = document.getElementById('cart-count');
+    const badgeMobile = document.getElementById('cart-count-mobile');
 
-    if (badge) {
-        badge.textContent = count;
+    if (badgeDesktop) {
+        badgeDesktop.textContent = count;
     }
+    if (badgeMobile) {
+        badgeMobile.textContent = count;
+    }
+}
+
+function showToast(message, type = 'success') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+        <span>${message}</span>
+        <button type="button" class="toast-close" onclick="this.parentElement.remove()">×</button>
+    `;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('toast-fade');
+        setTimeout(() => toast.remove(), 300);
+    }, 3500);
 }
 
 function addToCart(product) {
@@ -31,7 +58,45 @@ function addToCart(product) {
     }
 
     saveCart(cart);
-    alert(`Added ${product.title} to the cart.`);
+    showToast(`🛍️ Added "${product.title}" to your cart!`);
+}
+
+function setupMobileNav() {
+    const toggleBtn = document.getElementById('mobile-menu-toggle');
+    const mainNav = document.getElementById('site-main-nav');
+
+    if (toggleBtn && mainNav) {
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = mainNav.classList.toggle('nav-open');
+            toggleBtn.classList.toggle('is-active', isOpen);
+            toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        });
+
+        // Close when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!mainNav.contains(e.target) && !toggleBtn.contains(e.target) && mainNav.classList.contains('nav-open')) {
+                mainNav.classList.remove('nav-open');
+                toggleBtn.classList.remove('is-active');
+                toggleBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+}
+
+function changeCartQuantity(id, delta) {
+    const cart = getCart();
+    const item = cart.find(i => i.id === id);
+    if (!item) return;
+
+    item.quantity += delta;
+    if (item.quantity <= 0) {
+        removeFromCart(id);
+        return;
+    }
+    saveCart(cart);
+    renderCartPage();
+    renderCheckoutPage();
 }
 
 function renderCartPage() {
@@ -43,35 +108,78 @@ function renderCartPage() {
     const cart = getCart();
     container.innerHTML = '';
 
+    const cartButtons = document.querySelector('.cart-buttons');
+
     if (cart.length === 0) {
-        container.innerHTML = '<div class="empty-state"><h3>Your cart is empty.</h3><p>Add products from the marketplace to see them here.</p></div>';
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🛒</div>
+                <h3>Your shopping cart is empty</h3>
+                <p>Browse our verified Ugandan marketplace and add genuine products to your cart.</p>
+                <div class="empty-state-actions">
+                    <a href="index.php" class="btn-primary">Browse Marketplace</a>
+                </div>
+            </div>
+        `;
+        if (cartButtons) {
+            cartButtons.style.display = 'none';
+        }
         return;
     }
 
+    if (cartButtons) {
+        cartButtons.style.display = 'flex';
+    }
+
     let total = 0;
+    const itemsList = document.createElement('div');
+    itemsList.className = 'cart-items-list';
 
     cart.forEach(item => {
         const itemTotal = item.price * item.quantity;
         total += itemTotal;
 
         const row = document.createElement('div');
-        row.className = 'cart-item';
+        row.className = 'cart-item-card';
         row.innerHTML = `
-            <img src="uploads/${item.image}" alt="${item.title}">
-            <div class="cart-item-meta">
-                <h3>${item.title}</h3>
-                <p>UGX ${Number(item.price).toLocaleString()}</p>
-                <p>Quantity: ${item.quantity}</p>
+            <img src="uploads/${item.image}" alt="${item.title}" class="cart-item-thumb">
+            <div class="cart-item-details">
+                <h3 class="cart-item-title">${item.title}</h3>
+                <div class="cart-item-unit-price">UGX ${Number(item.price).toLocaleString()} each</div>
+                <div class="cart-qty-controls">
+                    <button type="button" class="btn-qty-adj" data-action="dec" data-id="${item.id}" aria-label="Decrease quantity">−</button>
+                    <span class="qty-display">${item.quantity}</span>
+                    <button type="button" class="btn-qty-adj" data-action="inc" data-id="${item.id}" aria-label="Increase quantity">+</button>
+                </div>
             </div>
-            <button class="remove-cart-item" data-id="${item.id}">Remove</button>
+            <div class="cart-item-subtotal-box">
+                <div class="subtotal-label">Subtotal</div>
+                <div class="subtotal-val">UGX ${Number(itemTotal).toLocaleString()}</div>
+                <button type="button" class="remove-cart-item-btn" data-id="${item.id}">🗑️ Remove</button>
+            </div>
         `;
 
-        container.appendChild(row);
+        itemsList.appendChild(row);
     });
 
+    container.appendChild(itemsList);
+
     const summary = document.createElement('div');
-    summary.className = 'cart-summary';
-    summary.innerHTML = `<strong>Total: UGX ${Number(total).toLocaleString()}</strong>`;
+    summary.className = 'cart-order-summary-box';
+    summary.innerHTML = `
+        <div class="summary-line">
+            <span>Estimated Subtotal (${cart.reduce((s, i) => s + i.quantity, 0)} items)</span>
+            <strong>UGX ${Number(total).toLocaleString()}</strong>
+        </div>
+        <div class="summary-line text-muted">
+            <span>Delivery Verification</span>
+            <span style="color: #16a34a; font-weight: 600;">Calculated at Checkout</span>
+        </div>
+        <div class="summary-total-line">
+            <span>Total Payable</span>
+            <span class="total-amount">UGX ${Number(total).toLocaleString()}</span>
+        </div>
+    `;
     container.appendChild(summary);
 }
 
@@ -85,37 +193,53 @@ function renderCheckoutPage() {
     container.innerHTML = '';
 
     if (cart.length === 0) {
-        container.innerHTML = '<div class="empty-state"><h3>Your cart is empty.</h3><p>Add products to your cart before checking out.</p></div>';
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🛒</div>
+                <h3>Your cart is empty</h3>
+                <p>Add products to your cart before proceeding to checkout.</p>
+                <div class="empty-state-actions">
+                    <a href="index.php" class="btn-primary">Browse Marketplace</a>
+                </div>
+            </div>
+        `;
         document.getElementById('checkout-submit')?.setAttribute('disabled', 'true');
         document.getElementById('cart_data')?.setAttribute('value', JSON.stringify([]));
         return;
     }
 
     let total = 0;
+    const table = document.createElement('div');
+    table.className = 'checkout-items-summary';
+
     cart.forEach(item => {
         const itemTotal = item.price * item.quantity;
         total += itemTotal;
 
         const row = document.createElement('div');
-        row.className = 'cart-item';
+        row.className = 'checkout-item-row';
         row.innerHTML = `
-            <img src="uploads/${item.image}" alt="${item.title}">
-            <div class="cart-item-meta">
-                <h3>${item.title}</h3>
-                <p>UGX ${Number(item.price).toLocaleString()}</p>
-                <p>Quantity: ${item.quantity}</p>
+            <img src="uploads/${item.image}" alt="${item.title}" class="checkout-item-thumb">
+            <div class="checkout-item-info">
+                <h4>${item.title}</h4>
+                <p>Qty: <strong>${item.quantity}</strong> × UGX ${Number(item.price).toLocaleString()}</p>
             </div>
-            <div class="cart-item-meta">
-                <p><strong>Subtotal:</strong> UGX ${Number(itemTotal).toLocaleString()}</p>
+            <div class="checkout-item-subtotal">
+                UGX ${Number(itemTotal).toLocaleString()}
             </div>
         `;
-        container.appendChild(row);
+        table.appendChild(row);
     });
 
     const summary = document.createElement('div');
-    summary.className = 'cart-summary';
-    summary.innerHTML = `<strong>Total: UGX ${Number(total).toLocaleString()}</strong>`;
-    container.appendChild(summary);
+    summary.className = 'checkout-total-banner';
+    summary.innerHTML = `
+        <span>Order Total:</span>
+        <strong class="total-price-large">UGX ${Number(total).toLocaleString()}</strong>
+    `;
+    table.appendChild(summary);
+
+    container.appendChild(table);
 
     const cartInput = document.getElementById('cart_data');
     if (cartInput) {
@@ -210,9 +334,17 @@ function setupCartActions() {
             return;
         }
 
-        const removeButton = event.target.closest('.remove-cart-item');
+        const removeButton = event.target.closest('.remove-cart-item, .remove-cart-item-btn');
         if (removeButton) {
             removeFromCart(Number(removeButton.dataset.id));
+            return;
+        }
+
+        const qtyBtn = event.target.closest('.btn-qty-adj');
+        if (qtyBtn) {
+            const id = Number(qtyBtn.dataset.id);
+            const action = qtyBtn.dataset.action;
+            changeCartQuantity(id, action === 'inc' ? 1 : -1);
             return;
         }
 
@@ -233,6 +365,7 @@ function setupCartActions() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+    setupMobileNav();
     updateCartCount();
     setupCartActions();
     setupCarousel();

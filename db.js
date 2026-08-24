@@ -5,26 +5,58 @@ const ADMIN_USERNAME = 'EasyMarket@admin123easymarket';
 const ADMIN_PASSWORD = '@@!!easymarketadmin!@';
 
 // Database connection string support (Supabase, Neon, PostgreSQL, Railway, etc.)
-const connectionString = process.env.DATABASE_URL || 
-                         process.env.POSTGRES_URL || 
-                         process.env.SUPABASE_DB_URL || 
-                         process.env.PG_CONNECTION_STRING;
+let rawConnectionString = (process.env.DATABASE_URL || 
+                           process.env.POSTGRES_URL || 
+                           process.env.SUPABASE_DB_URL || 
+                           process.env.PG_CONNECTION_STRING || '').trim();
 
 let pool = null;
 let isConnectedToPostgres = false;
 
-if (connectionString || process.env.PGHOST) {
+function parsePgConfig(connStr) {
+  if (!connStr) return null;
+  
+  // Try custom regex to extract user, password, host, port, database cleanly even with @ in password
+  const match = connStr.match(/^postgres(?:ql)?:\/\/([^:]+):(.*)@([^:/]+)(?::(\d+))?\/(.*)$/);
+  if (match) {
+    const [, user, rawPass, host, portStr, dbWithQuery] = match;
+    const dbName = dbWithQuery.split('?')[0];
+    // If rawPass is percent-encoded, decode it; otherwise use raw
+    let decodedPass = rawPass;
+    try {
+      decodedPass = decodeURIComponent(rawPass);
+    } catch {
+      decodedPass = rawPass;
+    }
+    return {
+      user: decodeURIComponent(user),
+      password: decodedPass,
+      host,
+      port: portStr ? parseInt(portStr, 10) : 5432,
+      database: dbName || 'postgres',
+      ssl: connStr.includes('sslmode=disable') ? false : { rejectUnauthorized: false }
+    };
+  }
+  
+  return {
+    connectionString: connStr,
+    ssl: connStr.includes('sslmode=disable') ? false : { rejectUnauthorized: false }
+  };
+}
+
+if (rawConnectionString || process.env.PGHOST) {
   try {
-    pool = new Pool({
-      connectionString: connectionString || undefined,
+    const config = parsePgConfig(rawConnectionString) || {
       host: process.env.PGHOST,
       user: process.env.PGUSER,
       password: process.env.PGPASSWORD,
       database: process.env.PGDATABASE,
       port: process.env.PGPORT ? parseInt(process.env.PGPORT, 10) : 5432,
-      ssl: (connectionString && connectionString.includes('sslmode=disable')) ? false : { rejectUnauthorized: false }
-    });
-    console.log('PostgreSQL/Supabase pool initialized.');
+      ssl: { rejectUnauthorized: false }
+    };
+    
+    pool = new Pool(config);
+    console.log('PostgreSQL/Supabase pool initialized successfully.');
   } catch (err) {
     console.error('Error initializing PostgreSQL pool:', err.message);
     pool = null;
@@ -322,7 +354,7 @@ async function initDatabase() {
         );
       `);
 
-      // Ensure categories exist
+      // Ensure default categories exist if table is empty
       const catCountRes = await client.query('SELECT COUNT(*) FROM categories');
       if (parseInt(catCountRes.rows[0].count, 10) === 0) {
         for (const cat of memCategories) {
@@ -331,12 +363,7 @@ async function initDatabase() {
         await client.query("SELECT setval('categories_id_seq', (SELECT MAX(id) FROM categories))");
       }
 
-      // Remove existing products as requested
-      await client.query('DELETE FROM order_items');
-      await client.query('DELETE FROM product_images');
-      await client.query('DELETE FROM products');
-
-      // Seed admin user
+      // Seed admin user if not already present
       const userRes = await client.query('SELECT * FROM users WHERE LOWER(email) = $1', [ADMIN_USERNAME.toLowerCase()]);
       if (userRes.rows.length === 0) {
         await client.query(
@@ -1231,6 +1258,11 @@ const db = {
       marketing: {
         campaigns,
         trafficSources
+      },
+      database: {
+        isConnected: isConnectedToPostgres,
+        type: isConnectedToPostgres ? 'Supabase / PostgreSQL (Active & Persistent)' : 'In-Memory Fallback Mode',
+        hasConnectionString: !!rawConnectionString
       }
     };
   }
