@@ -65,7 +65,6 @@ if (rawConnectionString || process.env.PGHOST) {
 
 // In-Memory fallback store
 const adminPasswordHash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
-const defaultPasswordHash = bcrypt.hashSync('password123', 10);
 
 let memCategories = [
   { id: 1, name: 'Electronics' },
@@ -75,23 +74,11 @@ let memCategories = [
 ];
 
 let memProducts = [];
-
 let memProductImages = [];
 
 let memUsers = [
   { 
     id: 1, 
-    name: 'Paul Mukasa', 
-    email: 'paul@example.com', 
-    password_hash: defaultPasswordHash, 
-    is_admin: 0, 
-    phone: '+256 701 234567', 
-    whatsapp_number: '256701234567', 
-    has_whatsapp: true,
-    created_at: new Date('2026-01-01') 
-  },
-  { 
-    id: 2, 
     name: 'EasyMarket Admin', 
     email: ADMIN_USERNAME.toLowerCase(), 
     password_hash: adminPasswordHash, 
@@ -99,120 +86,21 @@ let memUsers = [
     phone: '+256 763 480495', 
     whatsapp_number: '256763480495', 
     has_whatsapp: true,
-    created_at: new Date('2026-01-01') 
+    created_at: new Date() 
   }
 ];
 
 let memOrders = [];
+let memOrderItems = [];
+let memNotifications = [];
+let memMessages = [];
+let memSupportTickets = [];
+let memReturnsRefunds = [];
+let memCampaigns = [];
 
-const REGISTRATION_INTEGRITY_MESSAGE = 
-  "Welcome to EasyMarket Uganda, your trusted marketplace for buying and selling genuine products across the country. " +
-  "As a registered member, you are strictly required to provide authentic, accurate, and completely truthful information about every product you list. " +
-  "Deceiving, misleading, or presenting counterfeit goods to customers is entirely forbidden on this platform. " +
-  "All product descriptions, specifications, warranty details, and physical conditions must reflect the exact reality of the items offered. " +
-  "Sellers must always upload genuine photographs showcasing the actual condition of their products from multiple angles. " +
-  "You are prohibited from manipulating prices, hiding unannounced fees, or quoting false mobile money transaction codes. " +
-  "Any report or detection of deceptive behavior, scamming, or misrepresentation will be thoroughly investigated by our administrative moderation team. " +
-  "Honest commerce protects both buyers and sellers while fostering a safe and thriving local economy. " +
-  "Failure to comply with these marketplace integrity rules will result in immediate suspension and cancellation of all active listings. " +
-  "The ultimate penalty for deceiving customers is that your account and phone number will be permanently blocked and banned from ever using EasyMarket again.";
-
-let memNotifications = [
-  {
-    id: 1,
-    user_id: 1,
-    title: '🛡️ Mandatory Anti-Deception & Authenticity Policy',
-    message: REGISTRATION_INTEGRITY_MESSAGE,
-    type: 'integrity_warning',
-    is_read: 0,
-    created_at: new Date()
-  },
-  {
-    id: 2,
-    user_id: 1,
-    title: '🚚 Order #101 Delivered',
-    message: 'Your order for iPhone 13 Pro 128GB has been successfully delivered. Thank you for shopping on EasyMarket!',
-    type: 'order_status',
-    is_read: 1,
-    created_at: new Date('2026-02-20T16:00:00Z')
-  }
-];
-
-let memMessages = [
-  {
-    id: 1,
-    sender_id: 1,
-    receiver_id: 2,
-    product_id: 1,
-    message: 'Hello, is the iPhone 13 Pro available for immediate delivery to Kampala Road today?',
-    is_read: 1,
-    created_at: new Date('2026-02-20T10:15:00Z')
-  },
-  {
-    id: 2,
-    sender_id: 2,
-    receiver_id: 1,
-    product_id: 1,
-    message: 'Yes Paul, it is in stock with 94% battery health! Our dispatch rider can reach you within 2 hours.',
-    is_read: 1,
-    created_at: new Date('2026-02-20T10:20:00Z')
-  }
-];
-
-let memSupportTickets = [
-  {
-    id: 1,
-    user_id: 1,
-    user_name: 'Paul Mukasa',
-    user_email: 'paul@example.com',
-    subject: 'Delivery inquiry for Jinja address',
-    message: 'Do you offer same-day courier dispatch to Jinja town for furniture items?',
-    status: 'Open',
-    admin_reply: '',
-    created_at: new Date('2026-02-21T09:00:00Z'),
-    updated_at: new Date('2026-02-21T09:00:00Z')
-  }
-];
-
-let memReturnsRefunds = [
-  {
-    id: 1,
-    order_id: 101,
-    user_id: 1,
-    user_name: 'Paul Mukasa',
-    product_title: 'iPhone 13 Pro 128GB',
-    reason: 'Incorrect case accessory color in package',
-    amount: 50000,
-    status: 'Pending',
-    admin_note: '',
-    created_at: new Date('2026-02-21T14:00:00Z')
-  }
-];
-
-let memCampaigns = [
-  {
-    id: 1,
-    name: 'Kampala Free Delivery Week',
-    code: 'KLAFREE',
-    discount_percent: 10,
-    status: 'Active',
-    clicks: 1420,
-    conversions: 89,
-    start_date: '2026-02-15',
-    end_date: '2026-02-28'
-  },
-  {
-    id: 2,
-    name: 'Tech Bonanza Festival',
-    code: 'TECH50',
-    discount_percent: 15,
-    status: 'Active',
-    clicks: 850,
-    conversions: 54,
-    start_date: '2026-02-01',
-    end_date: '2026-03-01'
-  }
-];
+let ownerCommissionPercentage = 10; // Default 10% platform share / owner payout
+let dbLastCheckTime = null;
+let dbPingLatency = null;
 
 let memNextProdId = 6;
 let memNextImgId = 10;
@@ -1155,8 +1043,35 @@ const db = {
     return memCampaigns;
   },
 
+  getOwnerCommissionPercentage() {
+    return ownerCommissionPercentage;
+  },
+
+  setOwnerCommissionPercentage(percentage) {
+    const p = parseFloat(percentage);
+    if (!isNaN(p) && p >= 0 && p <= 100) {
+      ownerCommissionPercentage = p;
+    }
+    return ownerCommissionPercentage;
+  },
+
   // Comprehensive System Analytics
   async getSystemStats() {
+    let isDbHealthy = isConnectedToPostgres;
+    let dbLatencyMs = null;
+
+    if (isConnectedToPostgres && pool) {
+      try {
+        const start = Date.now();
+        await pool.query('SELECT 1');
+        dbLatencyMs = Date.now() - start;
+        isDbHealthy = true;
+      } catch (e) {
+        console.warn('Database health ping failed:', e.message);
+        isDbHealthy = false;
+      }
+    }
+
     const products = await this.getProducts();
     const orders = await this.getAllOrders();
     const tickets = await this.getAllSupportTickets();
@@ -1164,11 +1079,15 @@ const db = {
     const campaigns = await this.getAllCampaigns();
 
     const totalProducts = products.length;
-    const activeProducts = products.filter(p => p.quantity > 0 && p.approved === 1).length;
-    const lowStockProducts = products.filter(p => p.quantity > 0 && p.quantity <= 3);
-    const outOfStockProducts = products.filter(p => p.quantity === 0);
+    const activeProducts = products.filter(p => (p.quantity || 0) > 0 && p.approved === 1).length;
+    const lowStockProducts = products.filter(p => (p.quantity || 0) > 0 && (p.quantity || 0) <= 3);
+    const outOfStockProducts = products.filter(p => (p.quantity || 0) === 0);
     const totalStockUnits = products.reduce((sum, p) => sum + (p.quantity || 0), 0);
-    const totalInventoryValue = products.reduce((sum, p) => sum + ((p.price || 0) * (p.quantity || 0)), 0);
+    
+    // Total Expected Revenue across ALL uploaded products in the marketplace
+    const totalExpectedCatalogRevenue = products.reduce((sum, p) => sum + ((p.price || 0) * (p.quantity || 0)), 0);
+    const ownerShareAmount = totalExpectedCatalogRevenue * (ownerCommissionPercentage / 100);
+    const sellersShareAmount = totalExpectedCatalogRevenue - ownerShareAmount;
 
     const totalOrders = orders.length;
     const pendingOrders = orders.filter(o => o.status === 'Pending').length;
@@ -1182,7 +1101,6 @@ const db = {
       .reduce((sum, o) => sum + (parseFloat(o.total) || 0), 0);
 
     const averageOrderValue = totalOrders > 0 ? (totalGrossSales / totalOrders) : 0;
-    // Estimated Conversion Rate based on 100 sessions per active campaign click baseline
     const estimatedVisitors = 1250 + (orders.length * 24);
     const conversionRate = totalOrders > 0 ? ((totalOrders / estimatedVisitors) * 100).toFixed(1) : '0.0';
 
@@ -1226,6 +1144,14 @@ const db = {
         conversionRate,
         estimatedVisitors
       },
+      financialForecast: {
+        totalExpectedCatalogRevenue,
+        ownerCommissionPercentage,
+        ownerShareAmount,
+        sellersShareAmount,
+        ownerPhoneNumber: '+256 763 480495',
+        ownerWhatsApp: '256763480495'
+      },
       fulfillmentQueue: {
         pending: pendingOrders,
         processing: processingOrders,
@@ -1243,7 +1169,7 @@ const db = {
         totalProducts,
         activeProducts,
         totalStockUnits,
-        totalInventoryValue,
+        totalInventoryValue: totalExpectedCatalogRevenue,
         lowStock: lowStockProducts,
         outOfStock: outOfStockProducts,
         allProducts: products
@@ -1260,8 +1186,9 @@ const db = {
         trafficSources
       },
       database: {
-        isConnected: isConnectedToPostgres,
-        type: isConnectedToPostgres ? 'Supabase / PostgreSQL (Active & Persistent)' : 'In-Memory Fallback Mode',
+        isConnected: isDbHealthy,
+        latencyMs: dbLatencyMs,
+        type: isDbHealthy ? 'Supabase PostgreSQL (Cloud Active & Persistent)' : 'Temporary In-Memory Fallback',
         hasConnectionString: !!rawConnectionString
       }
     };

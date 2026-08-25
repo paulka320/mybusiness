@@ -31,7 +31,7 @@
         </div>
     <% } %>
 
-    <form class="product-form" method="POST" enctype="multipart/form-data" action="upload.php" id="product-upload-form">
+    <form class="product-form" method="POST" enctype="multipart/form-data" action="/upload" id="product-upload-form">
         <label for="prod-title">Product Title</label>
         <input type="text" id="prod-title" name="title" value="<%= locals.formData ? (formData.title || '') : '' %>" placeholder="e.g. iPhone 13 Pro 128GB Graphite or Men's Leather Jacket" required>
 
@@ -83,32 +83,32 @@
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin: 16px 0;">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
                 <span style="font-size: 18px;">📸</span>
-                <strong style="color: #1e293b;">Mandatory 5-Angle Verified Images</strong>
+                <strong style="color: #1e293b;">Product Photos & Multi-Angle Verification</strong>
             </div>
             <p style="font-size: 12px; color: #64748b; margin: 0 0 14px;">
-                To uphold our 10-point authenticity standards, upload clear images showing each perspective of the actual physical product.
+                Upload clear genuine images of your product. Front view is required; additional angles help buyers inspect details.
             </p>
 
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
                 <div>
-                    <label style="font-size: 12px; font-weight: 600;">1. Front View *</label>
+                    <label style="font-size: 12px; font-weight: 600; color: #0f172a;">1. Front View (Main Photo) *</label>
                     <input type="file" name="front_image" accept="image/*" required style="font-size: 12px;">
                 </div>
                 <div>
-                    <label style="font-size: 12px; font-weight: 600;">2. Back View *</label>
-                    <input type="file" name="back_image" accept="image/*" required style="font-size: 12px;">
+                    <label style="font-size: 12px; font-weight: 600; color: #64748b;">2. Back View (Optional)</label>
+                    <input type="file" name="back_image" accept="image/*" style="font-size: 12px;">
                 </div>
                 <div>
-                    <label style="font-size: 12px; font-weight: 600;">3. Left Side View *</label>
-                    <input type="file" name="left_image" accept="image/*" required style="font-size: 12px;">
+                    <label style="font-size: 12px; font-weight: 600; color: #64748b;">3. Left Side (Optional)</label>
+                    <input type="file" name="left_image" accept="image/*" style="font-size: 12px;">
                 </div>
                 <div>
-                    <label style="font-size: 12px; font-weight: 600;">4. Right Side View *</label>
-                    <input type="file" name="right_image" accept="image/*" required style="font-size: 12px;">
+                    <label style="font-size: 12px; font-weight: 600; color: #64748b;">4. Right Side (Optional)</label>
+                    <input type="file" name="right_image" accept="image/*" style="font-size: 12px;">
                 </div>
                 <div>
-                    <label style="font-size: 12px; font-weight: 600;">5. Top/Bottom View *</label>
-                    <input type="file" name="top_image" accept="image/*" required style="font-size: 12px;">
+                    <label style="font-size: 12px; font-weight: 600; color: #64748b;">5. Top/Detail (Optional)</label>
+                    <input type="file" name="top_image" accept="image/*" style="font-size: 12px;">
                 </div>
             </div>
         </div>

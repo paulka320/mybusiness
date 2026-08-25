@@ -101,6 +101,15 @@ app.use(cookieParser(SESSION_SECRET));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(uploadsDir));
 
+// URL Normalizer: Fix any accidental double relative paths like /admin_dashboard.php/admin_dashboard.php
+app.use((req, res, next) => {
+  if (req.originalUrl && req.originalUrl.includes('admin_dashboard.php/admin_dashboard.php')) {
+    const cleaned = req.originalUrl.replace(/admin_dashboard\.php\/admin_dashboard\.php/g, 'admin_dashboard.php');
+    return res.redirect(cleaned);
+  }
+  next();
+});
+
 // Express Session configured for iframes and proxy compatibility
 app.use(session({
   name: 'easymarket_sid',
@@ -536,12 +545,30 @@ app.post(['/upload.php', '/upload'], upload.fields([
   const imageViews = ['front_image', 'back_image', 'left_image', 'right_image', 'top_image'];
   const uploadedFiles = [];
 
-  for (const view of imageViews) {
-    if (!files[view] || files[view].length === 0) {
-      errors.push(`Missing view: ${view.replace('_', ' ')} is required.`);
-    } else {
+  // Front/Main image is the primary view
+  if (files['front_image'] && files['front_image'].length > 0) {
+    uploadedFiles.push(files['front_image'][0].filename);
+  }
+
+  // Any additional views are included as extra gallery angles
+  ['back_image', 'left_image', 'right_image', 'top_image'].forEach(view => {
+    if (files[view] && files[view].length > 0) {
       uploadedFiles.push(files[view][0].filename);
     }
+  });
+
+  // If no specific front view but another view was chosen
+  if (uploadedFiles.length === 0) {
+    for (const view of imageViews) {
+      if (files[view] && files[view].length > 0) {
+        uploadedFiles.push(files[view][0].filename);
+        break;
+      }
+    }
+  }
+
+  if (uploadedFiles.length === 0) {
+    errors.push('Please upload at least one clear product image (Front View).');
   }
 
   if (errors.length > 0) {
@@ -1020,7 +1047,7 @@ app.post(['/admin_register.php', '/admin_register'], async (req, res) => {
 
 app.get(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
   if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
-    return res.redirect('admin_login.php');
+    return res.redirect('/admin_login.php');
   }
 
   const allProducts = (await db.getProducts()).sort((a, b) => b.id - a.id);
@@ -1034,10 +1061,24 @@ app.get(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
   });
 });
 
-// Admin: Update Order Fulfillment Status
-app.post(['/admin_dashboard.php/order-status', '/admin_dashboard/order-status'], async (req, res) => {
+// Admin: Update Owner Commission / Platform Payout Share %
+app.post(['/admin_dashboard.php/commission-rate', '/admin_dashboard/commission-rate', '/admin/commission-rate'], async (req, res) => {
   if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
-    return res.redirect('admin_login.php');
+    return res.redirect('/admin_login.php');
+  }
+
+  const newRate = parseFloat(req.body.commission_rate);
+  if (!isNaN(newRate)) {
+    db.setOwnerCommissionPercentage(newRate);
+  }
+
+  res.redirect('/admin_dashboard?tab=overview');
+});
+
+// Admin: Update Order Fulfillment Status
+app.post(['/admin_dashboard.php/order-status', '/admin_dashboard/order-status', '/admin_dashboard.php/admin_dashboard.php/order-status'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
   }
 
   const orderId = parseInt(req.body.order_id, 10);
@@ -1046,13 +1087,13 @@ app.post(['/admin_dashboard.php/order-status', '/admin_dashboard/order-status'],
     await db.updateOrderStatus(orderId, status);
   }
 
-  res.redirect('admin_dashboard.php?tab=orders');
+  res.redirect('/admin_dashboard?tab=orders');
 });
 
 // Admin: Quick Product Edit
-app.post(['/admin_dashboard.php/quick-product', '/admin_dashboard/quick-product'], async (req, res) => {
+app.post(['/admin_dashboard.php/quick-product', '/admin_dashboard/quick-product', '/admin_dashboard.php/admin_dashboard.php/quick-product'], async (req, res) => {
   if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
-    return res.redirect('admin_login.php');
+    return res.redirect('/admin_login.php');
   }
 
   const productId = parseInt(req.body.product_id, 10);
@@ -1065,13 +1106,27 @@ app.post(['/admin_dashboard.php/quick-product', '/admin_dashboard/quick-product'
     });
   }
 
-  res.redirect('admin_dashboard.php?tab=inventory');
+  res.redirect('/admin_dashboard?tab=inventory');
+});
+
+// Admin: Delete Product
+app.post(['/admin_dashboard.php/delete-product', '/admin_dashboard/delete-product', '/admin/delete-product'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const productId = parseInt(req.body.product_id, 10);
+  if (productId) {
+    await db.deleteProduct(productId);
+  }
+
+  res.redirect('/admin_dashboard?tab=inventory');
 });
 
 // Admin: Reply to Support Ticket
-app.post(['/admin_dashboard.php/reply-ticket', '/admin_dashboard/reply-ticket'], async (req, res) => {
+app.post(['/admin_dashboard.php/reply-ticket', '/admin_dashboard/reply-ticket', '/admin_dashboard.php/admin_dashboard.php/reply-ticket'], async (req, res) => {
   if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
-    return res.redirect('admin_login.php');
+    return res.redirect('/admin_login.php');
   }
 
   const ticketId = parseInt(req.body.ticket_id, 10);
@@ -1082,13 +1137,13 @@ app.post(['/admin_dashboard.php/reply-ticket', '/admin_dashboard/reply-ticket'],
     await db.replySupportTicket(ticketId, reply, status);
   }
 
-  res.redirect('admin_dashboard.php?tab=customers');
+  res.redirect('/admin_dashboard?tab=customers');
 });
 
 // Admin: Update Return/Refund Status
-app.post(['/admin_dashboard.php/return-status', '/admin_dashboard/return-status'], async (req, res) => {
+app.post(['/admin_dashboard.php/return-status', '/admin_dashboard/return-status', '/admin_dashboard.php/admin_dashboard.php/return-status'], async (req, res) => {
   if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
-    return res.redirect('admin_login.php');
+    return res.redirect('/admin_login.php');
   }
 
   const returnId = parseInt(req.body.return_id, 10);
@@ -1099,13 +1154,13 @@ app.post(['/admin_dashboard.php/return-status', '/admin_dashboard/return-status'
     await db.updateReturnStatus(returnId, status, adminNote);
   }
 
-  res.redirect('admin_dashboard.php?tab=orders');
+  res.redirect('/admin_dashboard?tab=orders');
 });
 
 // Admin legacy stock/delete handler
 app.post(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
   if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
-    return res.redirect('admin_login.php');
+    return res.redirect('/admin_login.php');
   }
 
   const productId = parseInt(req.body.product_id, 10);
@@ -1116,7 +1171,7 @@ app.post(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
     await db.deleteProduct(productId);
   }
 
-  res.redirect('admin_dashboard.php?tab=inventory');
+  res.redirect('/admin_dashboard?tab=inventory');
 });
 
 // Logout

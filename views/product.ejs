@@ -29,10 +29,12 @@
             <div class="image-carousel">
                 <% if (images && images.length > 0) { %>
                     <% images.forEach(function(img) { %>
-                        <img src="uploads/<%= img.image_path %>" alt="<%= product.title %>" class="carousel-image">
+                        <% var pImg = img.image_path && (img.image_path.startsWith('http') || img.image_path.startsWith('/') || img.image_path.startsWith('data:')) ? img.image_path : ('/uploads/' + (img.image_path || 'phone-front.svg')); %>
+                        <img src="<%= pImg %>" onerror="this.onerror=null;this.src='/phone-front.svg';" alt="<%= product.title %>" class="carousel-image">
                     <% }); %>
                 <% } else { %>
-                    <img src="uploads/<%= product.image %>" alt="<%= product.title %>" class="carousel-image">
+                    <% var mainImg = product.image && (product.image.startsWith('http') || product.image.startsWith('/') || product.image.startsWith('data:')) ? product.image : ('/uploads/' + (product.image || 'phone-front.svg')); %>
+                    <img src="<%= mainImg %>" onerror="this.onerror=null;this.src='/phone-front.svg';" alt="<%= product.title %>" class="carousel-image">
                 <% } %>
             </div>
             <% if (images && images.length > 1) { %>
