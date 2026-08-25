@@ -28,7 +28,10 @@
         <label for="admin-email">Username or Email</label>
         <input type="text" id="admin-email" name="email" placeholder="Enter admin username or email" value="<%= locals.email || '' %>" required autocomplete="username">
 
-        <label for="admin-password">Password</label>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+            <label for="admin-password" style="margin: 0;">Password</label>
+            <a href="forgot_password.php" style="font-size: 12px; color: #2563eb; font-weight: 600; text-decoration: none;">Forgot Password? (Get OTP)</a>
+        </div>
         <div style="position: relative;">
             <input type="password" id="admin-password" name="password" required autocomplete="current-password" style="width: 100%;">
             <button type="button" id="toggle-pwd-btn" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #64748b; font-size: 12px; padding: 4px 8px;">Show</button>
@@ -36,6 +39,10 @@
 
         <button type="submit" id="admin-login-submit" style="margin-top: 16px;">Login as Admin</button>
     </form>
+
+    <div style="text-align: center; margin-top: 18px; font-size: 13px;">
+        <a href="forgot_password.php" style="color: #64748b; text-decoration: none;">🔐 Reset password via registered email OTP</a>
+    </div>
 </main>
 
 <script>

@@ -81,7 +81,7 @@
         <section class="chat-main-window <%= locals.counterparty ? 'has-active-chat' : '' %>">
             <% if (locals.counterparty) { %>
                 <!-- Chat Header with WhatsApp Bridge -->
-                <div class="chat-window-header">
+                <div class="chat-window-header" style="flex-wrap: wrap; gap: 12px;">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <a href="messages.php" class="mobile-back-to-chats-btn" aria-label="Back to conversations list">
                             ← All Chats
@@ -91,19 +91,38 @@
                                 <%= (counterparty.name || 'U').charAt(0).toUpperCase() %>
                             </div>
                             <div>
-                                <h3 style="margin: 0; font-size: 15px; font-weight: 700;"><%= counterparty.name %></h3>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <h3 style="margin: 0; font-size: 15px; font-weight: 700;"><%= counterparty.name %></h3>
+                                    <% if (counterparty.is_admin === 1) { %>
+                                        <span style="background: #eff6ff; color: #2563eb; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">Admin</span>
+                                    <% } %>
+                                </div>
                                 <span style="font-size: 12px; color: #16a34a; font-weight: 600;">● Active on EasyMarket</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- WhatsApp Switcher Button -->
-                    <% if (counterparty.whatsapp_number) { %>
-                        <% const waUrl = `https://wa.me/${db.sanitizeWhatsAppNumber(counterparty.whatsapp_number)}?text=${encodeURIComponent('Hello! Continuing our conversation from EasyMarket Uganda.')}`; %>
-                        <a href="<%= waUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm">
-                            <span>💬 WhatsApp</span>
+                    <!-- Counterparty Verified Details & WhatsApp Button -->
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <% if (counterparty.email || counterparty.phone) { %>
+                            <div style="font-size: 11.5px; color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 6px;">
+                                <% if (counterparty.email) { %><span>✉️ <%= counterparty.email %></span><% } %>
+                                <% if (counterparty.phone) { %><span style="margin-left: 6px;">📞 <%= counterparty.phone %></span><% } %>
+                            </div>
+                        <% } %>
+
+                        <% 
+                            const targetWaNum = db.sanitizeWhatsAppNumber(counterparty.whatsapp_number || counterparty.phone || db.SYSTEM_WHATSAPP_NUMBER || '256763480495');
+                            const customerName = locals.user ? user.name : 'Customer';
+                            const customerContact = locals.user ? (user.phone || user.whatsapp_number || user.email || '') : '';
+                            const itemName = locals.activeProduct ? ` regarding "${activeProduct.title}"` : '';
+                            const waText = `Hello! I am ${customerName} (Registered on EasyMarket: ${customerContact}). I am messaging you${itemName} to follow up.`;
+                            const waUrl = `https://wa.me/${targetWaNum}?text=${encodeURIComponent(waText)}`;
+                        %>
+                        <a href="<%= waUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm" style="display: inline-flex; align-items: center; gap: 5px;">
+                            <span>💬 Open in WhatsApp</span>
                         </a>
-                    <% } %>
+                    </div>
                 </div>
 
                 <!-- Product Reference Card if chatting about an item -->

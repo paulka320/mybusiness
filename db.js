@@ -101,6 +101,9 @@ let memSupportTickets = [];
 let memReturnsRefunds = [];
 let memCampaigns = [];
 let memPriceChangeRequests = [];
+let memPasswordResets = [];
+
+const SYSTEM_WHATSAPP_NUMBER = '256763480495'; // Official EasyMarket Uganda WhatsApp Helpline Line
 
 let ownerCommissionPercentage = 10; // Default 10% platform share / owner payout
 let dbLastCheckTime = null;
@@ -264,6 +267,15 @@ async function initDatabase() {
           status VARCHAR(50) DEFAULT 'Pending',
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           resolved_at TIMESTAMPTZ
+        );
+
+        CREATE TABLE IF NOT EXISTS password_resets (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) NOT NULL,
+          otp_code VARCHAR(10) NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL,
+          used INT DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
       `);
 
@@ -1439,6 +1451,177 @@ const db = {
       })
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   },
+
+  // Retrieve all customer message threads for Admin follow-up with full profile details
+  async getAllCustomerMessagesForAdmin() {
+    let allMsgs = [];
+    if (isConnectedToPostgres && pool) {
+      const res = await pool.query(`
+        SELECT m.*, 
+               s.name as sender_name, s.email as sender_email, s.phone as sender_phone, s.whatsapp_number as sender_whatsapp, s.role as sender_role, s.is_admin as sender_is_admin,
+               r.name as receiver_name, r.email as receiver_email, r.phone as receiver_phone, r.whatsapp_number as receiver_whatsapp, r.role as receiver_role, r.is_admin as receiver_is_admin,
+               p.title as product_title, p.price as product_price, p.image as product_image
+        FROM messages m
+        LEFT JOIN users s ON m.sender_id = s.id
+        LEFT JOIN users r ON m.receiver_id = r.id
+        LEFT JOIN products p ON m.product_id = p.id
+        ORDER BY m.created_at ASC
+      `);
+      allMsgs = res.rows;
+    } else {
+      allMsgs = memMessages.map(m => {
+        const sender = memUsers.find(u => u.id === m.sender_id);
+        const receiver = memUsers.find(u => u.id === m.receiver_id);
+        const prod = m.product_id ? memProducts.find(p => p.id === m.product_id) : null;
+        return {
+          ...m,
+          sender_name: sender ? sender.name : 'Customer',
+          sender_email: sender ? sender.email : '',
+          sender_phone: sender ? (sender.phone || '') : '',
+          sender_whatsapp: sender ? (sender.whatsapp_number || '') : '',
+          sender_role: sender ? (sender.role || 'customer') : 'customer',
+          sender_is_admin: sender ? (sender.is_admin || 0) : 0,
+          receiver_name: receiver ? receiver.name : 'User',
+          receiver_email: receiver ? receiver.email : '',
+          receiver_phone: receiver ? (receiver.phone || '') : '',
+          receiver_whatsapp: receiver ? (receiver.whatsapp_number || '') : '',
+          receiver_role: receiver ? (receiver.role || 'customer') : 'customer',
+          receiver_is_admin: receiver ? (receiver.is_admin || 0) : 0,
+          product_title: prod ? prod.title : null,
+          product_price: prod ? prod.price : null,
+          product_image: prod ? prod.image : null
+        };
+      });
+    }
+
+    // Group threads by customer (non-admin or counterparty)
+    const customerThreads = {};
+    for (const msg of allMsgs) {
+      // Determine which user is the customer
+      const isSenderAdmin = msg.sender_is_admin === 1 || (msg.sender_email && msg.sender_email.toLowerCase().includes('admin'));
+      const customerUserId = isSenderAdmin ? msg.receiver_id : msg.sender_id;
+      const customerName = isSenderAdmin ? msg.receiver_name : msg.sender_name;
+      const customerEmail = isSenderAdmin ? msg.receiver_email : msg.sender_email;
+      const customerPhone = isSenderAdmin ? msg.receiver_phone : msg.sender_phone;
+      const customerWhatsApp = isSenderAdmin ? msg.receiver_whatsapp : msg.sender_whatsapp;
+
+      if (!customerThreads[customerUserId]) {
+        customerThreads[customerUserId] = {
+          customerId: customerUserId,
+          customerName: customerName || `Customer #${customerUserId}`,
+          customerEmail: customerEmail || 'Not specified',
+          customerPhone: customerPhone || 'Not specified',
+          customerWhatsApp: customerWhatsApp || customerPhone || '',
+          productTitle: msg.product_title,
+          productPrice: msg.product_price,
+          productImage: msg.product_image,
+          productId: msg.product_id,
+          lastMessage: msg.message,
+          lastTime: msg.created_at,
+          unreadCount: 0,
+          messages: []
+        };
+      }
+
+      customerThreads[customerUserId].messages.push(msg);
+      customerThreads[customerUserId].lastMessage = msg.message;
+      customerThreads[customerUserId].lastTime = msg.created_at;
+      if (!isSenderAdmin && !msg.is_read) {
+        customerThreads[customerUserId].unreadCount++;
+      }
+    }
+
+    return Object.values(customerThreads).sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
+  },
+
+  // Password Recovery with One-Time Password (OTP)
+  async createPasswordResetOtp(email) {
+    const cleanEmail = email.trim().toLowerCase();
+    // 6-digit numeric OTP code
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // Valid for 15 minutes
+
+    if (isConnectedToPostgres && pool) {
+      // Invalidate previous unused OTPs for this email
+      await pool.query('UPDATE password_resets SET used = 1 WHERE LOWER(email) = $1', [cleanEmail]);
+      await pool.query(
+        'INSERT INTO password_resets (email, otp_code, expires_at, used) VALUES ($1, $2, $3, 0)',
+        [cleanEmail, otpCode, expiresAt]
+      );
+    } else {
+      memPasswordResets.forEach(r => {
+        if (r.email.toLowerCase() === cleanEmail) {
+          r.used = 1;
+        }
+      });
+      memPasswordResets.push({
+        id: memPasswordResets.length + 1,
+        email: cleanEmail,
+        otp_code: otpCode,
+        expires_at: expiresAt,
+        used: 0,
+        created_at: new Date()
+      });
+    }
+
+    return {
+      otp: otpCode,
+      expiresAt,
+      email: cleanEmail
+    };
+  },
+
+  async verifyPasswordResetOtp(email, otpCode) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanOtp = (otpCode || '').trim();
+
+    if (isConnectedToPostgres && pool) {
+      const res = await pool.query(
+        'SELECT * FROM password_resets WHERE LOWER(email) = $1 AND otp_code = $2 AND used = 0 AND expires_at > NOW() ORDER BY id DESC LIMIT 1',
+        [cleanEmail, cleanOtp]
+      );
+      return res.rows.length > 0;
+    }
+
+    const record = memPasswordResets.find(r => 
+      r.email.toLowerCase() === cleanEmail &&
+      r.otp_code === cleanOtp &&
+      r.used === 0 &&
+      new Date(r.expires_at) > new Date()
+    );
+
+    return !!record;
+  },
+
+  async updateUserPassword(email, newPasswordHash) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+
+    if (isConnectedToPostgres && pool) {
+      await pool.query(
+        'UPDATE users SET password_hash = $1 WHERE LOWER(email) = $2',
+        [newPasswordHash, cleanEmail]
+      );
+      // Mark all OTPs as used
+      await pool.query(
+        'UPDATE password_resets SET used = 1 WHERE LOWER(email) = $1',
+        [cleanEmail]
+      );
+      return true;
+    }
+
+    const user = memUsers.find(u => u.email.toLowerCase() === cleanEmail);
+    if (user) {
+      user.password_hash = newPasswordHash;
+    }
+    memPasswordResets.forEach(r => {
+      if (r.email.toLowerCase() === cleanEmail) {
+        r.used = 1;
+      }
+    });
+    return true;
+  },
+
+  SYSTEM_WHATSAPP_NUMBER,
 
   // Orders and Fulfillment
   async createOrder({ userId, total, address, phone, paymentReference, items }) {

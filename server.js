@@ -7,6 +7,7 @@ const fs = require('fs');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const { db, initDatabase } = require('./db');
+const { validateEmailAuthenticity } = require('./emailValidator');
 
 const app = express();
 const PORT = 3000;
@@ -922,6 +923,14 @@ app.post(['/register.php', '/register'], async (req, res) => {
 
   try {
     if (errors.length === 0) {
+      // Check email authenticity and Google/mailserver validity
+      const emailCheck = await validateEmailAuthenticity(email);
+      if (!emailCheck.isValid) {
+        errors.push(emailCheck.error || 'The email address could not be verified as authentic.');
+      }
+    }
+
+    if (errors.length === 0) {
       const existing = await db.findUserByEmailOrUsername(email);
       if (existing) {
         errors.push('This email address is already registered. Please sign in instead.');
@@ -1072,6 +1081,13 @@ app.post(['/admin_register.php', '/admin_register'], async (req, res) => {
 
   try {
     if (errors.length === 0) {
+      const emailCheck = await validateEmailAuthenticity(email);
+      if (!emailCheck.isValid) {
+        errors.push(emailCheck.error || 'The email address could not be verified as authentic.');
+      }
+    }
+
+    if (errors.length === 0) {
       const existing = await db.findUserByEmailOrUsername(email);
       if (existing) {
         errors.push('This email is already registered.');
@@ -1105,6 +1121,166 @@ app.post(['/admin_register.php', '/admin_register'], async (req, res) => {
       errors: ['Admin registration failed: ' + (err.message || 'Please try again.')],
       name,
       email
+    });
+  }
+});
+
+// ----------------------------------------------------
+// PASSWORD RECOVERY WITH ONE-TIME PASSWORD (OTP)
+// ----------------------------------------------------
+
+// Request Password Reset OTP
+app.get(['/forgot_password.php', '/forgot_password'], (req, res) => {
+  res.render('forgot_password', {
+    errors: [],
+    success: null,
+    email: req.query.email || ''
+  });
+});
+
+app.post(['/forgot_password.php', '/forgot_password'], async (req, res) => {
+  const email = (req.body.email || '').trim().toLowerCase();
+  const errors = [];
+
+  if (!email) {
+    errors.push('Please enter your registered email address.');
+  }
+
+  try {
+    if (errors.length === 0) {
+      // 1. Authenticity check
+      const authCheck = await validateEmailAuthenticity(email);
+      if (!authCheck.isValid) {
+        errors.push(authCheck.error || 'The email address is invalid or not verified by Google / mail servers.');
+      }
+    }
+
+    let user = null;
+    if (errors.length === 0) {
+      // 2. Check if user exists in database
+      user = await db.findUserByEmailOrUsername(email);
+      if (!user) {
+        errors.push('No account was found with this registered email address. Please verify your address or register.');
+      }
+    }
+
+    if (errors.length > 0) {
+      return res.render('forgot_password', {
+        errors,
+        success: null,
+        email
+      });
+    }
+
+    // 3. Generate 6-digit OTP
+    const otpData = await db.createPasswordResetOtp(email);
+
+    // Create notification for user
+    await db.createNotification({
+      userId: user.id,
+      title: '🔐 Password Reset OTP Code',
+      message: `Your One-Time Password (OTP) is ${otpData.otp}. It will expire in 15 minutes.`,
+      type: 'system'
+    });
+
+    console.log(`[AUTH] Dispatched Password Reset OTP to ${email}: ${otpData.otp}`);
+
+    // Render reset view with generated OTP preview for seamless testing & verification
+    res.render('reset_password', {
+      email,
+      otp: '',
+      previewOtp: otpData.otp,
+      errors: [],
+      success: `A 6-digit OTP code has been dispatched to ${email}.`
+    });
+  } catch (err) {
+    console.error('Error generating password reset OTP:', err);
+    res.render('forgot_password', {
+      errors: ['Failed to process password recovery: ' + (err.message || 'Please try again.')],
+      success: null,
+      email
+    });
+  }
+});
+
+// Verify OTP & Reset Password
+app.get(['/reset_password.php', '/reset_password'], (req, res) => {
+  const email = (req.query.email || '').trim().toLowerCase();
+  if (!email) {
+    return res.redirect('/forgot_password.php');
+  }
+
+  res.render('reset_password', {
+    email,
+    otp: req.query.otp || '',
+    previewOtp: null,
+    errors: [],
+    success: null
+  });
+});
+
+app.post(['/reset_password.php', '/reset_password'], async (req, res) => {
+  const email = (req.body.email || '').trim().toLowerCase();
+  const otp = (req.body.otp || '').trim();
+  const password = req.body.password || '';
+  const confirmPassword = req.body.confirm_password || '';
+  const errors = [];
+
+  if (!email || !otp || !password || !confirmPassword) {
+    errors.push('All fields (Email, 6-digit OTP, and New Password) are required.');
+  }
+
+  if (password !== confirmPassword) {
+    errors.push('The new passwords do not match.');
+  }
+
+  if (password.length < 6) {
+    errors.push('New password must be at least 6 characters.');
+  }
+
+  try {
+    if (errors.length === 0) {
+      const isValidOtp = await db.verifyPasswordResetOtp(email, otp);
+      if (!isValidOtp) {
+        errors.push('Invalid or expired OTP verification code. Please request a new code.');
+      }
+    }
+
+    if (errors.length > 0) {
+      return res.render('reset_password', {
+        email,
+        otp,
+        previewOtp: null,
+        errors,
+        success: null
+      });
+    }
+
+    // Hash and update password
+    const newHash = bcrypt.hashSync(password, 10);
+    await db.updateUserPassword(email, newHash);
+
+    const user = await db.findUserByEmailOrUsername(email);
+    if (user) {
+      setAuthSession(req, res, {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        is_admin: user.is_admin ? 1 : 0
+      });
+    }
+
+    req.session.save(() => {
+      res.redirect('index.php?reset_success=1');
+    });
+  } catch (err) {
+    console.error('Error resetting password:', err);
+    res.render('reset_password', {
+      email,
+      otp,
+      previewOtp: null,
+      errors: ['Failed to reset password: ' + (err.message || 'Please try again.')],
+      success: null
     });
   }
 });
@@ -1205,6 +1381,7 @@ app.get(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
   const stats = await db.getSystemStats();
   const activeTab = req.query.tab || 'overview';
   const filter = req.query.filter || 'all';
+  const customerThreads = await db.getAllCustomerMessagesForAdmin();
 
   let displayedProducts = allProducts;
   if (filter === 'available') {
@@ -1229,9 +1406,32 @@ app.get(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
     filter,
     stats,
     activeTab,
+    customerThreads,
     syncResult,
     adminFeedback
   });
+});
+
+// Admin: Direct In-App Reply to Customer Message
+app.post(['/admin_dashboard/reply-message', '/admin_dashboard.php/reply-message'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const customerId = parseInt(req.body.customer_id, 10);
+  const productId = parseInt(req.body.product_id, 10) || null;
+  const message = (req.body.message || '').trim();
+
+  if (customerId && message) {
+    await db.sendMessage({
+      senderId: req.session.user_id,
+      receiverId: customerId,
+      productId: productId || null,
+      message
+    });
+  }
+
+  res.redirect('/admin_dashboard?tab=messages');
 });
 
 // Admin: Update Owner Commission / Platform Payout Share %
