@@ -312,9 +312,9 @@ const db = {
       `);
       let list = res.rows.map(r => ({
         ...r,
-        price: parseFloat(r.price),
-        quantity: parseInt(r.quantity, 10),
-        approved: parseInt(r.approved, 10)
+        price: isNaN(parseFloat(r.price)) ? 0 : parseFloat(r.price),
+        quantity: isNaN(parseInt(r.quantity, 10)) ? 1 : parseInt(r.quantity, 10),
+        approved: (r.approved === true || r.approved === 1 || r.approved === '1' || r.approved == null || r.approved === 'true') ? 1 : 0
       }));
       if (filterFn) {
         list = list.filter(filterFn);
@@ -325,6 +325,9 @@ const db = {
       const cat = memCategories.find(c => c.id === p.category_id);
       return {
         ...p,
+        price: isNaN(parseFloat(p.price)) ? 0 : parseFloat(p.price),
+        quantity: isNaN(parseInt(p.quantity, 10)) ? 1 : parseInt(p.quantity, 10),
+        approved: (p.approved === true || p.approved === 1 || p.approved === '1' || p.approved == null || p.approved === 'true') ? 1 : 0,
         category_name: cat ? cat.name : 'General'
       };
     });
@@ -346,9 +349,9 @@ const db = {
       const row = res.rows[0];
       return {
         ...row,
-        price: parseFloat(row.price),
-        quantity: parseInt(row.quantity, 10),
-        approved: parseInt(row.approved, 10)
+        price: isNaN(parseFloat(row.price)) ? 0 : parseFloat(row.price),
+        quantity: isNaN(parseInt(row.quantity, 10)) ? 1 : parseInt(row.quantity, 10),
+        approved: (row.approved === true || row.approved === 1 || row.approved === '1' || row.approved == null || row.approved === 'true') ? 1 : 0
       };
     }
     const p = memProducts.find(item => item.id === id);
@@ -356,6 +359,9 @@ const db = {
     const cat = memCategories.find(c => c.id === p.category_id);
     return {
       ...p,
+      price: isNaN(parseFloat(p.price)) ? 0 : parseFloat(p.price),
+      quantity: isNaN(parseInt(p.quantity, 10)) ? 1 : parseInt(p.quantity, 10),
+      approved: (p.approved === true || p.approved === 1 || p.approved === '1' || p.approved == null || p.approved === 'true') ? 1 : 0,
       category_name: cat ? cat.name : 'General'
     };
   },
@@ -363,35 +369,77 @@ const db = {
   async getProductImages(productId) {
     if (isConnectedToPostgres && pool) {
       const res = await pool.query('SELECT * FROM product_images WHERE product_id = $1 ORDER BY is_main DESC, id ASC', [productId]);
-      return res.rows;
+      if (res.rows.length > 0) {
+        return res.rows;
+      }
+      const prodRes = await pool.query('SELECT image FROM products WHERE id = $1', [productId]);
+      if (prodRes.rows.length > 0 && prodRes.rows[0].image) {
+        return [{ id: 0, product_id: productId, image_path: prodRes.rows[0].image, is_main: 1 }];
+      }
+      return [];
     }
-    return memProductImages.filter(img => img.product_id === productId);
+    const memList = memProductImages.filter(img => img.product_id === productId);
+    if (memList.length > 0) return memList;
+    const p = memProducts.find(item => item.id === productId);
+    if (p && p.image) {
+      return [{ id: 0, product_id: productId, image_path: p.image, is_main: 1 }];
+    }
+    return [];
   },
 
   async getSimilarProducts(categoryId, currentId, limit = 4) {
     if (isConnectedToPostgres && pool) {
       const res = await pool.query(`
         SELECT * FROM products 
-        WHERE category_id = $1 AND id != $2 AND approved = 1 AND quantity > 0
+        WHERE category_id = $1 AND id != $2 AND (approved = 1 OR approved IS NULL OR approved = true) AND quantity > 0
         ORDER BY id DESC LIMIT $3
       `, [categoryId, currentId, limit]);
       return res.rows.map(r => ({ ...r, price: parseFloat(r.price) }));
     }
     return memProducts
-      .filter(p => p.category_id === categoryId && p.id !== currentId && p.approved === 1 && p.quantity > 0)
+      .filter(p => p.category_id === categoryId && p.id !== currentId && (p.approved === 1 || p.approved == null) && p.quantity > 0)
       .slice(0, limit);
   },
 
   async createProduct({ title, description, price, category_id, phone, whatsapp_number, location, payment_code, quantity, images, seller_id }) {
     const mainImage = (images && images.length > 0) ? images[0] : 'phone-front.svg';
     const wa = sanitizeWhatsAppNumber(whatsapp_number || phone);
+    const parsedPrice = isNaN(parseFloat(price)) ? 0 : parseFloat(price);
+    const parsedQty = isNaN(parseInt(quantity, 10)) ? 1 : Math.max(1, parseInt(quantity, 10));
+    let parsedCatId = parseInt(category_id, 10) || 1;
 
     if (isConnectedToPostgres && pool) {
+      // 1. Sanitize category ID against PostgreSQL categories
+      try {
+        const catRes = await pool.query('SELECT id FROM categories WHERE id = $1', [parsedCatId]);
+        if (catRes.rows.length === 0) {
+          const firstCat = await pool.query('SELECT id FROM categories ORDER BY id ASC LIMIT 1');
+          if (firstCat.rows.length > 0) {
+            parsedCatId = firstCat.rows[0].id;
+          }
+        }
+      } catch (err) {
+        console.warn('Error checking category in PG:', err.message);
+      }
+
+      // 2. Sanitize seller_id to avoid FK constraint failures
+      let validSellerId = null;
+      if (seller_id) {
+        try {
+          const userRes = await pool.query('SELECT id FROM users WHERE id = $1', [seller_id]);
+          if (userRes.rows.length > 0) {
+            validSellerId = seller_id;
+          }
+        } catch (err) {
+          console.warn('Error checking seller in PG:', err.message);
+        }
+      }
+
       const res = await pool.query(`
         INSERT INTO products (title, description, price, category_id, phone, whatsapp_number, location, image, payment_code, quantity, approved, seller_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1, $11)
         RETURNING id
-      `, [title, description, price, category_id, phone, wa, location, mainImage, payment_code, quantity, seller_id || null]);
+      `, [title, description, parsedPrice, parsedCatId, phone, wa, location, mainImage, payment_code, parsedQty, validSellerId]);
       
       const newProdId = res.rows[0].id;
       if (images && images.length > 0) {
@@ -410,28 +458,30 @@ const db = {
       id: newProdId,
       title,
       description,
-      price,
-      category_id,
+      price: parsedPrice,
+      category_id: parsedCatId,
       phone,
       whatsapp_number: wa,
       has_whatsapp: !!wa,
       location,
       image: mainImage,
       payment_code,
-      quantity,
+      quantity: parsedQty,
       approved: 1,
       seller_id: seller_id || 2,
       created_at: new Date()
     });
 
-    images.forEach((file, index) => {
-      memProductImages.push({
-        id: memNextImgId++,
-        product_id: newProdId,
-        image_path: file,
-        is_main: index === 0 ? 1 : 0
+    if (images && images.length > 0) {
+      images.forEach((file, index) => {
+        memProductImages.push({
+          id: memNextImgId++,
+          product_id: newProdId,
+          image_path: file,
+          is_main: index === 0 ? 1 : 0
+        });
       });
-    });
+    }
 
     return newProdId;
   },

@@ -150,6 +150,11 @@ function verifyAuthToken(token) {
 
 // Global Auth Context & Notification Badge Middleware
 app.use(async (req, res, next) => {
+  res.locals.db = db;
+  res.locals.sanitizeWhatsAppNumber = db.sanitizeWhatsAppNumber;
+  res.locals.currentPath = req.path || '';
+  res.locals.originalUrl = req.originalUrl || '';
+
   if (!req.session || !req.session.user_id) {
     const token = req.cookies.em_token || req.headers['x-auth-token'];
     const verified = verifyAuthToken(token);
@@ -518,7 +523,9 @@ app.post(['/upload.php', '/upload'], upload.fields([
   { name: 'back_image', maxCount: 1 },
   { name: 'left_image', maxCount: 1 },
   { name: 'right_image', maxCount: 1 },
-  { name: 'top_image', maxCount: 1 }
+  { name: 'top_image', maxCount: 1 },
+  { name: 'photos', maxCount: 10 },
+  { name: 'images', maxCount: 10 }
 ]), async (req, res) => {
   const categories = await db.getCategories();
   const errors = [];
@@ -526,7 +533,7 @@ app.post(['/upload.php', '/upload'], upload.fields([
   const title = (req.body.title || '').trim();
   const description = (req.body.description || '').trim();
   const price = parseFloat(req.body.price) || 0;
-  const quantity = parseInt(req.body.quantity, 10);
+  const quantity = isNaN(parseInt(req.body.quantity, 10)) ? 1 : Math.max(1, parseInt(req.body.quantity, 10));
   const categoryId = parseInt(req.body.category, 10) || 0;
   const phone = (req.body.phone || '').trim();
   const whatsappNumber = (req.body.whatsapp_number || req.body.phone || '').trim();
@@ -536,13 +543,12 @@ app.post(['/upload.php', '/upload'], upload.fields([
   if (!title) errors.push('Title is required.');
   if (!description) errors.push('Description is required.');
   if (price <= 0) errors.push('Price must be greater than zero.');
-  if (isNaN(quantity) || quantity < 0) errors.push('Quantity must be 0 or more.');
-  if (categoryId <= 0) errors.push('Category is required.');
-  if (!phone) errors.push('Seller phone number is required.');
-  if (!location) errors.push('Location is required.');
+  if (quantity < 0) errors.push('Quantity must be 0 or more.');
+  if (categoryId <= 0) errors.push('Please select a product category.');
+  if (!phone) errors.push('Seller contact phone number is required.');
+  if (!location) errors.push('Seller location in Uganda is required.');
 
   const files = req.files || {};
-  const imageViews = ['front_image', 'back_image', 'left_image', 'right_image', 'top_image'];
   const uploadedFiles = [];
 
   // Front/Main image is the primary view
@@ -550,25 +556,42 @@ app.post(['/upload.php', '/upload'], upload.fields([
     uploadedFiles.push(files['front_image'][0].filename);
   }
 
-  // Any additional views are included as extra gallery angles
+  // Any individual perspective angle views
   ['back_image', 'left_image', 'right_image', 'top_image'].forEach(view => {
     if (files[view] && files[view].length > 0) {
-      uploadedFiles.push(files[view][0].filename);
+      const fn = files[view][0].filename;
+      if (!uploadedFiles.includes(fn)) {
+        uploadedFiles.push(fn);
+      }
     }
   });
 
-  // If no specific front view but another view was chosen
+  // Any batch multiple photo selections
+  ['photos', 'images'].forEach(field => {
+    if (files[field] && files[field].length > 0) {
+      files[field].forEach(f => {
+        if (!uploadedFiles.includes(f.filename)) {
+          uploadedFiles.push(f.filename);
+        }
+      });
+    }
+  });
+
+  // Fallback if no front_image specifically tagged
   if (uploadedFiles.length === 0) {
-    for (const view of imageViews) {
-      if (files[view] && files[view].length > 0) {
-        uploadedFiles.push(files[view][0].filename);
-        break;
+    for (const key of Object.keys(files)) {
+      if (Array.isArray(files[key])) {
+        files[key].forEach(f => {
+          if (!uploadedFiles.includes(f.filename)) {
+            uploadedFiles.push(f.filename);
+          }
+        });
       }
     }
   }
 
   if (uploadedFiles.length === 0) {
-    errors.push('Please upload at least one clear product image (Front View).');
+    errors.push('Please upload at least one clear product image.');
   }
 
   if (errors.length > 0) {
@@ -602,14 +625,14 @@ app.post(['/upload.php', '/upload'], upload.fields([
     res.render('upload', {
       categories,
       errors: [],
-      success: `Product "${title}" uploaded successfully! (ID: ${newProdId})`,
+      success: `Product "${title}" uploaded successfully with ${uploadedFiles.length} photo(s)! (Listing ID: #${newProdId})`,
       formData: null
     });
   } catch (err) {
     console.error('Error uploading product:', err);
     res.render('upload', {
       categories,
-      errors: ['An unexpected error occurred while saving your product.'],
+      errors: ['An unexpected error occurred while saving your product to the database: ' + (err.message || 'Server error')],
       success: null,
       formData: req.body
     });

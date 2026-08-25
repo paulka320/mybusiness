@@ -9,39 +9,78 @@
 </head>
 <body>
 <%- include('header') %>
-<main class="section" style="max-width: 880px;">
+<main class="section" style="max-width: 900px;">
     <div class="section-heading">
         <div>
-            <h2>🔔 Your Notifications & Alerts</h2>
-            <p>Important updates on order statuses, community policies, and messages.</p>
+            <h2>🔔 Marketplace Alerts & Notifications</h2>
+            <p>Real-time order dispatches, account protection updates, and community alerts.</p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+            <a href="support.php" class="btn-secondary" style="font-size: 13px; padding: 7px 14px; text-decoration: none;">
+                🎧 Get Help
+            </a>
         </div>
     </div>
 
     <!-- Persistent Integrity Guarantee Notification Banner -->
-    <div class="integrity-card" style="margin-bottom: 24px;">
-        <div class="integrity-header">
-            <span style="font-size: 20px;">🛡️</span>
+    <div class="integrity-card" style="margin-bottom: 20px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 18px;">
+        <div class="integrity-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+            <span style="font-size: 22px;">🛡️</span>
             <div>
-                <strong>EasyMarket Authenticity & Anti-Deception Agreement (Active)</strong>
-                <div style="font-size: 11px; color: #9a3412;">Account Protected under 10-point authenticity guidelines</div>
+                <strong style="color: #9a3412; font-size: 15px;">EasyMarket Authenticity & Anti-Deception Guarantee</strong>
+                <div style="font-size: 11.5px; color: #c2410c;">Your account is protected under Uganda Marketplace Consumer Guidelines</div>
             </div>
         </div>
-        <p style="font-size: 13px; color: #7c2d12; line-height: 1.6; margin: 6px 0 0;">
-            Remember that all products listed or purchased through EasyMarket Uganda must represent truthful descriptions, actual photos, and genuine pricing. Deceptive listings or fraudulent attempts result in an immediate and irreversible ban.
+        <p style="font-size: 13px; color: #7c2d12; line-height: 1.6; margin: 0;">
+            All listings on EasyMarket require multi-angle authentic photos, truthful item condition tags, and transparent pricing. Any attempts at fraudulent listings or misleading specifications trigger automatic suspension.
         </p>
     </div>
 
+    <!-- Notification Category Filter Pills -->
+    <div class="category-list" style="margin-bottom: 20px;" id="notif-filter-tabs">
+        <button type="button" class="category-pill active" onclick="filterNotifs('all', this)">📋 All Alerts (<%= notifications ? notifications.length : 0 %>)</button>
+        <button type="button" class="category-pill" onclick="filterNotifs('order_status', this)">📦 Orders & Dispatch</button>
+        <button type="button" class="category-pill" onclick="filterNotifs('integrity_warning', this)">🛡️ Policy & Safety</button>
+        <button type="button" class="category-pill" onclick="filterNotifs('message', this)">💬 Messages</button>
+        <button type="button" class="category-pill" onclick="filterNotifs('support', this)">🎧 Support & Tickets</button>
+    </div>
+
     <% if (!notifications || notifications.length === 0) { %>
-        <div class="empty-state">
-            <span style="font-size: 40px; display: block; margin-bottom: 12px;">📭</span>
-            <h3>No notifications yet</h3>
-            <p>You will receive updates when you place orders, receive messages, or when our team reviews tickets.</p>
-            <a href="index.php" class="btn-primary" style="display: inline-block; margin-top: 14px;">Browse Marketplace</a>
+        <!-- Organized Starter Alerts if empty -->
+        <div class="notifications-list" id="notifications-container">
+            <div class="notif-item notif-read" data-category="integrity_warning">
+                <div class="notif-icon" style="background: #eff6ff; color: #2563eb;">🛡️</div>
+                <div class="notif-content">
+                    <div class="notif-top">
+                        <h4 class="notif-title">Welcome to EasyMarket Uganda</h4>
+                        <span class="notif-time">System Active</span>
+                    </div>
+                    <p class="notif-body">Your account is fully activated. You can list products across Kampala and Uganda or place orders with verified dispatch.</p>
+                    <div class="notif-actions">
+                        <a href="upload.php" class="btn-notif-link">➕ List a Product</a>
+                        <a href="index.php" class="btn-notif-link">🛍️ Start Shopping</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="notif-item notif-read" data-category="order_status">
+                <div class="notif-icon" style="background: #f0fdf4; color: #16a34a;">📦</div>
+                <div class="notif-content">
+                    <div class="notif-top">
+                        <h4 class="notif-title">Order Dispatch & Real-Time Tracking</h4>
+                        <span class="notif-time">Information</span>
+                    </div>
+                    <p class="notif-body">Whenever you place an order, live tracking notifications with WhatsApp dispatch updates will appear directly here.</p>
+                    <div class="notif-actions">
+                        <a href="orders.php" class="btn-notif-link">View My Orders</a>
+                    </div>
+                </div>
+            </div>
         </div>
     <% } else { %>
         <div class="notifications-list" id="notifications-container">
             <% notifications.forEach(function(n) { %>
-                <div class="notif-item <%= n.is_read ? 'notif-read' : 'notif-unread' %>" id="notif-<%= n.id %>">
+                <div class="notif-item <%= n.is_read ? 'notif-read' : 'notif-unread' %>" id="notif-<%= n.id %>" data-category="<%= n.type %>">
                     <div class="notif-icon">
                         <% if (n.type === 'integrity_warning') { %>
                             🛡️
@@ -85,6 +124,20 @@
 </main>
 
 <script>
+function filterNotifs(category, btn) {
+    document.querySelectorAll('#notif-filter-tabs .category-pill').forEach(el => el.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    const items = document.querySelectorAll('#notifications-container .notif-item');
+    items.forEach(item => {
+        if (category === 'all' || item.dataset.category === category) {
+            item.style.display = 'flex';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.btn-mark-read').forEach(btn => {
         btn.addEventListener('click', async () => {

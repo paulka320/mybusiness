@@ -9,97 +9,174 @@
 </head>
 <body>
 <%- include('header') %>
-<main class="section orders-section">
+<main class="section orders-section" style="max-width: 980px;">
     <div class="section-heading">
         <div>
             <h2>📦 My Orders & Purchase History</h2>
-            <p>Track real-time fulfillment status, request returns/refunds, or contact sellers.</p>
+            <p>Track real-time fulfillment status, courier dispatch, and 100% money-back returns.</p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+            <a href="https://wa.me/256763480495?text=<%= encodeURIComponent('Hello EasyMarket Support, I need assistance with my orders.') %>" target="_blank" class="btn-whatsapp-sm" style="padding: 7px 14px; font-size: 13px;">
+                💬 WhatsApp Dispatch Desk
+            </a>
+            <a href="index.php" class="btn-primary" style="padding: 7px 14px; font-size: 13px; text-decoration: none;">
+                🛍️ Continue Shopping
+            </a>
         </div>
     </div>
 
+    <!-- Orders Metric Summary Bar -->
+    <% 
+        const allOrders = orders || [];
+        const pendingCount = allOrders.filter(o => o.status === 'Pending' || o.status === 'Processing').length;
+        const deliveredCount = allOrders.filter(o => o.status === 'Delivered').length;
+        const totalSpent = allOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+    %>
+    <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 24px;">
+        <div class="stat-card">
+            <span class="stat-label">Total Orders Placed</span>
+            <span class="stat-value"><%= allOrders.length %></span>
+            <span style="font-size: 12px; color: #64748b;">Lifetime purchases</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">Active / In-Transit</span>
+            <span class="stat-value" style="color: #ea580c;"><%= pendingCount %></span>
+            <span style="font-size: 12px; color: #ea580c; font-weight: 600;">Dispatching in Uganda</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">Delivered Orders</span>
+            <span class="stat-value" style="color: #16a34a;"><%= deliveredCount %></span>
+            <span style="font-size: 12px; color: #16a34a; font-weight: 600;">Completed & verified</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">Total Order Value</span>
+            <span class="stat-value" style="color: #ff5e62; font-size: 1.3rem;">UGX <%= Number(totalSpent).toLocaleString() %></span>
+            <span style="font-size: 12px; color: #64748b;">UGX currency</span>
+        </div>
+    </div>
+
+    <!-- Order Category Tabs -->
+    <div class="category-list" style="margin-bottom: 22px;" id="order-filter-tabs">
+        <button type="button" class="category-pill active" onclick="filterOrders('all', this)">📋 All Orders (<%= allOrders.length %>)</button>
+        <button type="button" class="category-pill" onclick="filterOrders('Pending', this)">⏳ Pending / Processing (<%= pendingCount %>)</button>
+        <button type="button" class="category-pill" onclick="filterOrders('Delivered', this)">✅ Delivered (<%= deliveredCount %>)</button>
+        <button type="button" class="category-pill" onclick="filterOrders('Cancelled', this)">❌ Cancelled / Returned</button>
+    </div>
+
     <% if (orders && orders.length > 0) { %>
-        <% orders.forEach(function(order) { %>
-            <section class="order-card" id="order-card-<%= order.id %>">
-                <div class="order-card-header">
-                    <div>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <h3 style="margin: 0;">Order #<%= order.id %></h3>
-                            <span class="badge-tag" style="
-                                background: <%= order.status === 'Delivered' ? '#dcfce7' : (order.status === 'Cancelled' ? '#fee2e2' : '#fef3c7') %>;
-                                color: <%= order.status === 'Delivered' ? '#166534' : (order.status === 'Cancelled' ? '#991b1b' : '#92400e') %>;
-                                font-weight: 700;">
-                                <%= order.status %>
-                            </span>
-                        </div>
-                        <p style="margin: 4px 0 0; color: #64748b; font-size: 13px;">
-                            Placed on <%= new Date(order.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) %>
-                        </p>
-                    </div>
-                    <div style="text-align: right;">
-                        <span class="order-total">UGX <%= Number(order.total).toLocaleString() %></span>
-                    </div>
-                </div>
-
-                <div class="order-delivery">
-                    <p><strong>📍 Delivery Address:</strong> <%= order.address %></p>
-                    <p><strong>📞 Contact Phone:</strong> <%= order.phone %></p>
-                    <% if (order.payment_reference) { %>
-                        <p><strong>💳 Payment Ref:</strong> <code><%= order.payment_reference %></code></p>
-                    <% } %>
-                </div>
-
-                <div class="order-items">
-                    <% (order.items || []).forEach(function(item) { %>
-                        <div class="order-item">
-                            <img src="uploads/<%= item.image %>" alt="<%= item.title %>">
-                            <div style="flex: 1;">
-                                <h4><%= item.title %></h4>
-                                <p>Quantity: <strong><%= item.quantity %></strong> · Unit Price: UGX <%= Number(item.price).toLocaleString() %></p>
+        <div id="orders-list-container" style="display: flex; flex-direction: column; gap: 20px;">
+            <% orders.forEach(function(order) { %>
+                <section class="order-card" id="order-card-<%= order.id %>" data-status="<%= order.status %>">
+                    <div class="order-card-header" style="background: #f8fafc; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800;">Order #<%= order.id %></h3>
+                                <span class="badge-tag" style="
+                                    background: <%= order.status === 'Delivered' ? '#dcfce7' : (order.status === 'Cancelled' ? '#fee2e2' : '#fef3c7') %>;
+                                    color: <%= order.status === 'Delivered' ? '#166534' : (order.status === 'Cancelled' ? '#991b1b' : '#92400e') %>;
+                                    font-weight: 700; padding: 3px 10px; border-radius: 9999px; font-size: 12px;">
+                                    <%= order.status === 'Delivered' ? '✅ Delivered' : (order.status === 'Cancelled' ? '❌ Cancelled' : '⏳ In Fulfillment') %>
+                                </span>
                             </div>
-                            <a href="messages.php?product_id=<%= item.product_id %>" class="btn-inapp-msg" style="padding: 6px 12px; font-size: 12px;">
-                                💬 Message Seller
+                            <p style="margin: 4px 0 0; color: #64748b; font-size: 12.5px;">
+                                📅 Placed on <%= new Date(order.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) %>
+                            </p>
+                        </div>
+                        <div style="text-align: right;">
+                            <span class="order-total" style="font-size: 1.25rem; font-weight: 800; color: #ff5e62;">UGX <%= Number(order.total).toLocaleString() %></span>
+                        </div>
+                    </div>
+
+                    <div class="order-delivery" style="padding: 14px 20px; background: #ffffff; border-bottom: 1px solid #f1f5f9; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; font-size: 13px;">
+                        <div><strong>📍 Delivery Location:</strong> <span style="color: #334155;"><%= order.address %></span></div>
+                        <div><strong>📞 Contact Phone:</strong> <span style="color: #334155;"><%= order.phone %></span></div>
+                        <% if (order.payment_reference) { %>
+                            <div><strong>💳 Payment Ref:</strong> <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 12px;"><%= order.payment_reference %></code></div>
+                        <% } %>
+                    </div>
+
+                    <div class="order-items" style="padding: 16px 20px; display: flex; flex-direction: column; gap: 12px;">
+                        <% (order.items || []).forEach(function(item) { %>
+                            <% var itemPic = item.image && (item.image.startsWith('http') || item.image.startsWith('data:') || item.image.startsWith('/')) ? item.image : ('/uploads/' + (item.image || 'phone-front.svg')); %>
+                            <div class="order-item" style="display: flex; align-items: center; gap: 16px; padding: 10px; background: #f8fafc; border-radius: 8px; border: 1px solid #f1f5f9;">
+                                <img src="<%= itemPic %>" onerror="this.onerror=null;this.src='/phone-front.svg';" alt="<%= item.title %>" style="width: 60px; height: 60px; object-fit: contain; background: white; border-radius: 6px; padding: 4px; border: 1px solid #e2e8f0;">
+                                <div style="flex: 1;">
+                                    <h4 style="margin: 0 0 4px; font-size: 14px; font-weight: 700;"><%= item.title %></h4>
+                                    <p style="margin: 0; font-size: 12.5px; color: #64748b;">
+                                        Quantity: <strong style="color: #1e293b;"><%= item.quantity %></strong> · Unit Price: <span style="color: #ff5e62; font-weight: 700;">UGX <%= Number(item.price).toLocaleString() %></span>
+                                    </p>
+                                </div>
+                                <a href="messages.php?product_id=<%= item.product_id %>" class="btn-secondary" style="padding: 6px 12px; font-size: 12px; text-decoration: none; white-space: nowrap;">
+                                    💬 Message Seller
+                                </a>
+                            </div>
+                        <% }); %>
+                    </div>
+
+                    <!-- Order Action Bar (Returns, Refund, WhatsApp Help) -->
+                    <div style="padding: 14px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <!-- WhatsApp Direct Inquiry with Order Reference -->
+                            <a href="https://wa.me/256763480495?text=<%= encodeURIComponent(`Hello EasyMarket Dispatch, I am inquiring about my Order #${order.id} status.`) %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm">
+                                <span>💬 Track on WhatsApp</span>
                             </a>
                         </div>
-                    <% }); %>
-                </div>
 
-                <!-- Order Action Bar (Returns, Refund, WhatsApp Help) -->
-                <div style="padding: 14px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-                    <div style="display: flex; gap: 10px;">
-                        <!-- WhatsApp Direct Inquiry with Order Reference -->
-                        <a href="https://wa.me/256763480495?text=<%= encodeURIComponent(`Hello EasyMarket Dispatch, I am inquiring about my Order #${order.id} status.`) %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm">
-                            <span>💬 Track on WhatsApp</span>
-                        </a>
+                        <!-- Return / Refund Request Button & Collapse -->
+                        <% if (order.status !== 'Cancelled') { %>
+                            <details style="font-size: 13px; color: #475569;">
+                                <summary style="cursor: pointer; color: #e11d48; font-weight: 600; padding: 4px 8px;">
+                                    🔄 Request Return / Refund
+                                </summary>
+                                <form method="POST" action="returns.php" style="margin-top: 12px; background: white; padding: 14px; border-radius: 8px; border: 1px solid #fed7aa;">
+                                    <input type="hidden" name="order_id" value="<%= order.id %>">
+                                    <input type="hidden" name="amount" value="<%= order.total %>">
+                                    <label style="font-weight: 600; font-size: 12px; color: #1e293b; display: block; margin-bottom: 4px;">Reason for Return / Refund Request:</label>
+                                    <textarea name="reason" rows="2" placeholder="e.g. Item defective, not matching description, or wrong item received..." style="width: 100%; padding: 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1;" required></textarea>
+                                    <button type="submit" class="btn-primary" style="background: #e11d48; margin-top: 8px; font-size: 12px; padding: 8px 14px;">
+                                        Submit Refund Claim (UGX <%= Number(order.total).toLocaleString() %>)
+                                    </button>
+                                </form>
+                            </details>
+                        <% } %>
                     </div>
-
-                    <!-- Return / Refund Request Button & Collapse -->
-                    <% if (order.status !== 'Cancelled') { %>
-                        <details style="font-size: 13px; color: #475569;">
-                            <summary style="cursor: pointer; color: #e11d48; font-weight: 600;">
-                                🔄 Request Return / Refund
-                            </summary>
-                            <form method="POST" action="returns.php" style="margin-top: 12px; background: white; padding: 14px; border-radius: 8px; border: 1px solid #fed7aa;">
-                                <input type="hidden" name="order_id" value="<%= order.id %>">
-                                <input type="hidden" name="amount" value="<%= order.total %>">
-                                <label style="font-weight: 600; font-size: 12px; color: #1e293b;">Reason for Return / Refund Request:</label>
-                                <textarea name="reason" rows="2" placeholder="e.g. Item defective, not matching description, or wrong item received..." style="width: 100%; padding: 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1;" required></textarea>
-                                <button type="submit" class="btn-primary" style="background: #e11d48; margin-top: 8px; font-size: 12px; padding: 8px 14px;">
-                                    Submit Refund Claim (UGX <%= Number(order.total).toLocaleString() %>)
-                                </button>
-                            </form>
-                        </details>
-                    <% } %>
-                </div>
-            </section>
-        <% }); %>
+                </section>
+            <% }); %>
+        </div>
     <% } else { %>
-        <div class="empty-state">
-            <span style="font-size: 44px; display: block; margin-bottom: 12px;">🛍️</span>
-            <h3>No orders found yet</h3>
-            <p>Explore products across Kampala and Uganda and complete checkout.</p>
-            <a href="index.php" class="btn-primary" style="display: inline-block; margin-top: 14px;">Browse Products</a>
+        <div class="empty-state" style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 48px 24px; text-align: center;">
+            <span style="font-size: 48px; display: block; margin-bottom: 14px;">🛍️</span>
+            <h3 style="margin: 0 0 8px; font-size: 1.25rem;">No orders placed yet</h3>
+            <p style="color: #64748b; font-size: 14px; max-width: 440px; margin: 0 auto 20px;">
+                You haven't placed any orders yet. Explore thousands of verified deals from top sellers in Kampala, Entebbe, and across Uganda.
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                <a href="index.php" class="btn-primary" style="padding: 10px 20px; text-decoration: none;">Browse Hot Deals</a>
+                <a href="upload.php" class="btn-secondary" style="padding: 10px 20px; text-decoration: none;">➕ Sell a Product</a>
+            </div>
         </div>
     <% } %>
 </main>
+
+<script>
+function filterOrders(status, btn) {
+    document.querySelectorAll('#order-filter-tabs .category-pill').forEach(el => el.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    const cards = document.querySelectorAll('#orders-list-container .order-card');
+    cards.forEach(card => {
+        const cardStatus = card.dataset.status;
+        if (status === 'all') {
+            card.style.display = 'block';
+        } else if (status === 'Pending' && (cardStatus === 'Pending' || cardStatus === 'Processing')) {
+            card.style.display = 'block';
+        } else if (cardStatus === status) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+</script>
 </body>
 </html>

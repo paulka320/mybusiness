@@ -12,8 +12,16 @@
 <main class="section" style="max-width: 1100px;">
     <div class="section-heading">
         <div>
-            <h2>💬 In-App Direct Messaging</h2>
-            <p>Communicate directly on EasyMarket or switch to WhatsApp anytime.</p>
+            <h2>💬 Buyer & Seller Direct Messaging</h2>
+            <p>Chat directly on EasyMarket with instant delivery updates and 1-click WhatsApp sync.</p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+            <a href="messages.php?to=1" class="btn-secondary" style="font-size: 13px; padding: 8px 14px; text-decoration: none;">
+                🎧 Chat Support Desk
+            </a>
+            <a href="https://wa.me/256763480495?text=<%= encodeURIComponent('Hello EasyMarket Support, I have an inquiry.') %>" target="_blank" class="btn-whatsapp-sm" style="padding: 8px 14px; font-size: 13px;">
+                💬 Official WhatsApp
+            </a>
         </div>
     </div>
 
@@ -21,15 +29,33 @@
         <!-- Conversations Sidebar -->
         <aside class="chat-sidebar">
             <div class="chat-sidebar-header">
-                <h3>Conversations</h3>
+                <h3 style="margin: 0; font-size: 15px;">Conversations</h3>
             </div>
+            
             <div class="chat-conversations-list">
+                <!-- Pinned EasyMarket Support Thread -->
+                <a href="messages.php?to=1" class="conversation-item <%= (locals.counterparty && locals.counterparty.id == 1) ? 'active' : '' %>" style="border-bottom: 2px solid #e2e8f0; background: <%= (locals.counterparty && locals.counterparty.id == 1) ? '#eff6ff' : '#f8fafc' %>;">
+                    <div class="conv-avatar" style="background: #2563eb; color: #ffffff;">
+                        🛡️
+                    </div>
+                    <div class="conv-info">
+                        <div class="conv-top">
+                            <strong style="color: #1e40af;">EasyMarket Support</strong>
+                            <span class="unread-pill" style="background: #2563eb;">24/7 Desk</span>
+                        </div>
+                        <div class="conv-last-msg">
+                            Official assistance & order help
+                        </div>
+                    </div>
+                </a>
+
                 <% if (!conversations || conversations.length === 0) { %>
-                    <div style="padding: 24px; text-align: center; color: #64748b; font-size: 13px;">
-                        No conversation threads yet. When you message a seller or buyer, chats will appear here.
+                    <div style="padding: 24px 16px; text-align: center; color: #64748b; font-size: 13px;">
+                        <p style="margin: 0 0 8px;">No other buyer or seller chats yet.</p>
+                        <a href="index.php" style="color: #ff5e62; font-weight: 700; font-size: 12px; text-decoration: none;">Browse items to contact sellers</a>
                     </div>
                 <% } else { %>
-                    <% conversations.forEach(function(c) { %>
+                    <% conversations.filter(c => c.counterpartyId != 1).forEach(function(c) { %>
                         <a href="messages.php?to=<%= c.counterpartyId %>" class="conversation-item <%= (locals.counterparty && locals.counterparty.id == c.counterpartyId) ? 'active' : '' %>">
                             <div class="conv-avatar">
                                 <%= (c.counterpartyName || 'U').charAt(0).toUpperCase() %>
@@ -60,7 +86,7 @@
                         <a href="messages.php" class="mobile-back-to-chats-btn" aria-label="Back to conversations list">
                             ← All Chats
                         </a>
-                        <div class="chat-user-meta">
+                        <div class="chat-user-meta" style="display: flex; align-items: center; gap: 10px;">
                             <div class="conv-avatar" style="width: 38px; height: 38px; font-size: 15px;">
                                 <%= (counterparty.name || 'U').charAt(0).toUpperCase() %>
                             </div>
@@ -82,8 +108,9 @@
 
                 <!-- Product Reference Card if chatting about an item -->
                 <% if (locals.activeProduct) { %>
+                    <% var itemImg = activeProduct.image && (activeProduct.image.startsWith('http') || activeProduct.image.startsWith('data:') || activeProduct.image.startsWith('/')) ? activeProduct.image : ('/uploads/' + (activeProduct.image || 'phone-front.svg')); %>
                     <div class="chat-product-banner">
-                        <img src="uploads/<%= activeProduct.image %>" alt="<%= activeProduct.title %>">
+                        <img src="<%= itemImg %>" onerror="this.onerror=null;this.src='/phone-front.svg';" alt="<%= activeProduct.title %>">
                         <div>
                             <strong><%= activeProduct.title %></strong>
                             <div style="color: #ff5e62; font-weight: 700; font-size: 13px;">
@@ -97,15 +124,24 @@
                 <!-- Messages Stream -->
                 <div class="chat-messages-container" id="chat-messages-container">
                     <% if (!activeMessages || activeMessages.length === 0) { %>
-                        <div class="empty-chat-prompt">
-                            <span>👋</span>
-                            <p>Send a message to start the conversation with <%= counterparty.name %>.</p>
+                        <div class="empty-chat-prompt" style="text-align: center; padding: 40px 20px;">
+                            <span style="font-size: 40px;">👋</span>
+                            <h4 style="margin: 10px 0 4px;">Start conversation with <%= counterparty.name %></h4>
+                            <p style="color: #64748b; font-size: 13px; max-width: 380px; margin: 0 auto 16px;">
+                                Use the suggested quick messages below or type your questions regarding price, location, or dispatch.
+                            </p>
+                            <!-- Quick Prompts -->
+                            <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                                <button type="button" class="btn-quick-prompt" onclick="setChatMessage('Hello! Is this product still available in stock?')">📦 Is this available?</button>
+                                <button type="button" class="btn-quick-prompt" onclick="setChatMessage('Can you arrange delivery to my location today?')">🚚 Delivery inquiry</button>
+                                <button type="button" class="btn-quick-prompt" onclick="setChatMessage('What is your best final price for this item?')">🏷️ Best price?</button>
+                            </div>
                         </div>
                     <% } else { %>
                         <% activeMessages.forEach(function(msg) { %>
                             <div class="message-row <%= msg.sender_id === userId ? 'message-outgoing' : 'message-incoming' %>">
                                 <div class="message-bubble">
-                                    <p class="message-text"><%= msg.message %></p>
+                                    <p class="message-text" style="margin: 0;"><%= msg.message %></p>
                                     <span class="message-timestamp">
                                         <%= new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) %>
                                     </span>
@@ -125,11 +161,20 @@
                     <button type="submit" class="btn-send-msg" id="btn-send-msg">Send 🚀</button>
                 </form>
             <% } else { %>
-                <div class="empty-chat-prompt" style="margin: auto;">
-                    <span style="font-size: 48px; display: block; margin-bottom: 12px;">💬</span>
-                    <h3>Select a conversation</h3>
-                    <p>Or open any product listing to message the seller directly.</p>
-                    <a href="index.php" class="btn-primary" style="display: inline-block; margin-top: 12px;">Browse Listings</a>
+                <div class="empty-chat-prompt" style="margin: auto; text-align: center; padding: 48px 24px; max-width: 460px;">
+                    <span style="font-size: 52px; display: block; margin-bottom: 14px;">💬</span>
+                    <h3 style="margin: 0 0 8px; font-size: 1.25rem;">EasyMarket Messaging Hub</h3>
+                    <p style="color: #64748b; font-size: 13.5px; line-height: 1.6; margin: 0 0 20px;">
+                        Communicate safely with verified buyers and sellers in Uganda. Messages are backed by 24/7 fraud monitoring and seamless WhatsApp continuation.
+                    </p>
+                    <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                        <a href="messages.php?to=1" class="btn-primary" style="font-size: 13px; text-decoration: none;">
+                            🛡️ Message EasyMarket Support
+                        </a>
+                        <a href="index.php" class="btn-secondary" style="font-size: 13px; text-decoration: none;">
+                            🛍️ Browse Products
+                        </a>
+                    </div>
                 </div>
             <% } %>
         </section>
@@ -137,6 +182,14 @@
 </main>
 
 <script>
+function setChatMessage(text) {
+    const input = document.getElementById('chat-input-text');
+    if (input) {
+        input.value = text;
+        input.focus();
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const container = document.getElementById('chat-messages-container');
     if (container) {

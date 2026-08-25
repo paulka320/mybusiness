@@ -24,28 +24,59 @@
     </div>
 
     <div class="product-detail-grid">
-        <!-- 5-Angle Image Gallery & Carousel -->
-        <div class="product-detail-image">
-            <div class="image-carousel">
-                <% if (images && images.length > 0) { %>
-                    <% images.forEach(function(img) { %>
+        <!-- 5-Angle Verified Multi-Photo Gallery -->
+        <div class="product-detail-gallery-container">
+            <div class="product-gallery-main-stage" id="product-gallery-stage">
+                <% 
+                   var galleryList = (images && images.length > 0) ? images : [{ image_path: product.image || 'phone-front.svg', is_main: 1 }];
+                   var angleLabels = ['Front View (Main)', 'Back Perspective', 'Left Profile', 'Right Profile', 'Top / Detail Angle', 'Additional Angle 6', 'Additional Angle 7', 'Additional Angle 8'];
+                %>
+                
+                <div class="gallery-viewport">
+                    <% galleryList.forEach(function(img, idx) { %>
                         <% var pImg = img.image_path && (img.image_path.startsWith('http') || img.image_path.startsWith('/') || img.image_path.startsWith('data:')) ? img.image_path : ('/uploads/' + (img.image_path || 'phone-front.svg')); %>
-                        <img src="<%= pImg %>" onerror="this.onerror=null;this.src='/phone-front.svg';" alt="<%= product.title %>" class="carousel-image">
+                        <img 
+                            src="<%= pImg %>" 
+                            onerror="this.onerror=null;this.src='/phone-front.svg';" 
+                            alt="<%= product.title %> - <%= angleLabels[idx] || ('Angle ' + (idx + 1)) %>" 
+                            class="gallery-slide-img <%= idx === 0 ? 'active' : '' %>"
+                            data-index="<%= idx %>"
+                            id="gallery-slide-<%= idx %>"
+                        >
                     <% }); %>
-                <% } else { %>
-                    <% var mainImg = product.image && (product.image.startsWith('http') || product.image.startsWith('/') || product.image.startsWith('data:')) ? product.image : ('/uploads/' + (product.image || 'phone-front.svg')); %>
-                    <img src="<%= mainImg %>" onerror="this.onerror=null;this.src='/phone-front.svg';" alt="<%= product.title %>" class="carousel-image">
-                <% } %>
-            </div>
-            <% if (images && images.length > 1) { %>
-                <button class="carousel-prev" aria-label="Previous image">&lt;</button>
-                <button class="carousel-next" aria-label="Next image">&gt;</button>
-                <div class="carousel-indicators">
-                    <% for (var i = 0; i < images.length; i++) { %>
-                        <button class="indicator<%= i === 0 ? ' active' : '' %>" data-index="<%= i %>"></button>
+
+                    <% if (galleryList.length > 1) { %>
+                        <button type="button" class="gallery-nav-btn gallery-prev" id="gallery-btn-prev" aria-label="Previous Perspective">‹</button>
+                        <button type="button" class="gallery-nav-btn gallery-next" id="gallery-btn-next" aria-label="Next Perspective">›</button>
                     <% } %>
+
+                    <div class="gallery-angle-badge" id="gallery-angle-badge">
+                        📸 <span><%= angleLabels[0] || 'Angle 1 of ' + galleryList.length %></span>
+                    </div>
                 </div>
-                <p class="hint">📸 5-Angle Verified Views: Click arrows or dots to examine all perspectives.</p>
+            </div>
+
+            <!-- Multi-Angle Thumbnails Strip -->
+            <% if (galleryList.length > 1) { %>
+                <div class="gallery-thumbnails-strip" id="gallery-thumbnails-strip">
+                    <% galleryList.forEach(function(img, idx) { %>
+                        <% var pImg = img.image_path && (img.image_path.startsWith('http') || img.image_path.startsWith('/') || img.image_path.startsWith('data:')) ? img.image_path : ('/uploads/' + (img.image_path || 'phone-front.svg')); %>
+                        <button 
+                            type="button" 
+                            class="gallery-thumb-btn <%= idx === 0 ? 'active' : '' %>" 
+                            data-index="<%= idx %>"
+                            data-label="<%= angleLabels[idx] || ('Angle ' + (idx + 1) + ' of ' + galleryList.length) %>"
+                            aria-label="View <%= angleLabels[idx] || ('Angle ' + (idx + 1)) %>"
+                        >
+                            <img src="<%= pImg %>" onerror="this.onerror=null;this.src='/phone-front.svg';" alt="Thumb <%= idx + 1 %>">
+                            <span class="thumb-label"><%= (idx + 1) %></span>
+                        </button>
+                    <% }); %>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #64748b; margin-top: 8px;">
+                    <span>🛡️ <strong><%= galleryList.length %> Verified Angles</strong> uploaded</span>
+                    <span>Click any photo to switch perspective</span>
+                </div>
             <% } %>
         </div>
 

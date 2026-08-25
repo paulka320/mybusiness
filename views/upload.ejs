@@ -79,39 +79,117 @@
             </div>
         </div>
 
-        <!-- 5-Angle Verified Photos -->
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin: 16px 0;">
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-                <span style="font-size: 18px;">📸</span>
-                <strong style="color: #1e293b;">Product Photos & Multi-Angle Verification</strong>
+        <!-- 5-Angle Verified Photos & Batch Multi-Image Upload -->
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 20px 0;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 20px;">📸</span>
+                    <strong style="color: #0f172a; font-size: 16px;">Product Photos & Multi-Angle Verification</strong>
+                </div>
+                <span style="font-size: 12px; background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 9999px; font-weight: 600;">
+                    🛡️ 5-Angle Authenticity Verified
+                </span>
             </div>
-            <p style="font-size: 12px; color: #64748b; margin: 0 0 14px;">
-                Upload clear genuine images of your product. Front view is required; additional angles help buyers inspect details.
+            
+            <p style="font-size: 13px; color: #64748b; margin: 0 0 16px; line-height: 1.5;">
+                Upload real photos of your product. You can upload each angle individually or select multiple photos at once. Front view is required.
             </p>
 
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
-                <div>
-                    <label style="font-size: 12px; font-weight: 600; color: #0f172a;">1. Front View (Main Photo) *</label>
-                    <input type="file" name="front_image" accept="image/*" required style="font-size: 12px;">
+            <!-- Angle Slots with Live Preview -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 16px;">
+                <div class="photo-upload-slot" id="slot-front" style="border: 2px dashed #cbd5e1; border-radius: 10px; padding: 12px; background: #ffffff; text-align: center;">
+                    <label style="font-size: 12px; font-weight: 700; color: #0f172a; display: block; margin-bottom: 6px;">1. Front View (Required) *</label>
+                    <div class="preview-box" id="preview-box-front" style="height: 110px; display: flex; align-items: center; justify-content: center; background: #f1f5f9; border-radius: 8px; margin-bottom: 8px; overflow: hidden;">
+                        <span style="font-size: 28px; opacity: 0.5;">📷</span>
+                    </div>
+                    <input type="file" name="front_image" id="input-front-image" accept="image/*" required style="font-size: 11px; width: 100%;" onchange="previewUploadImage(this, 'preview-box-front')">
                 </div>
-                <div>
-                    <label style="font-size: 12px; font-weight: 600; color: #64748b;">2. Back View (Optional)</label>
-                    <input type="file" name="back_image" accept="image/*" style="font-size: 12px;">
+
+                <div class="photo-upload-slot" id="slot-back" style="border: 2px dashed #cbd5e1; border-radius: 10px; padding: 12px; background: #ffffff; text-align: center;">
+                    <label style="font-size: 12px; font-weight: 600; color: #475569; display: block; margin-bottom: 6px;">2. Back View (Optional)</label>
+                    <div class="preview-box" id="preview-box-back" style="height: 110px; display: flex; align-items: center; justify-content: center; background: #f1f5f9; border-radius: 8px; margin-bottom: 8px; overflow: hidden;">
+                        <span style="font-size: 28px; opacity: 0.5;">🔄</span>
+                    </div>
+                    <input type="file" name="back_image" id="input-back-image" accept="image/*" style="font-size: 11px; width: 100%;" onchange="previewUploadImage(this, 'preview-box-back')">
                 </div>
-                <div>
-                    <label style="font-size: 12px; font-weight: 600; color: #64748b;">3. Left Side (Optional)</label>
-                    <input type="file" name="left_image" accept="image/*" style="font-size: 12px;">
+
+                <div class="photo-upload-slot" id="slot-left" style="border: 2px dashed #cbd5e1; border-radius: 10px; padding: 12px; background: #ffffff; text-align: center;">
+                    <label style="font-size: 12px; font-weight: 600; color: #475569; display: block; margin-bottom: 6px;">3. Left Side (Optional)</label>
+                    <div class="preview-box" id="preview-box-left" style="height: 110px; display: flex; align-items: center; justify-content: center; background: #f1f5f9; border-radius: 8px; margin-bottom: 8px; overflow: hidden;">
+                        <span style="font-size: 28px; opacity: 0.5;">⬅️</span>
+                    </div>
+                    <input type="file" name="left_image" id="input-left-image" accept="image/*" style="font-size: 11px; width: 100%;" onchange="previewUploadImage(this, 'preview-box-left')">
                 </div>
-                <div>
-                    <label style="font-size: 12px; font-weight: 600; color: #64748b;">4. Right Side (Optional)</label>
-                    <input type="file" name="right_image" accept="image/*" style="font-size: 12px;">
+
+                <div class="photo-upload-slot" id="slot-right" style="border: 2px dashed #cbd5e1; border-radius: 10px; padding: 12px; background: #ffffff; text-align: center;">
+                    <label style="font-size: 12px; font-weight: 600; color: #475569; display: block; margin-bottom: 6px;">4. Right Side (Optional)</label>
+                    <div class="preview-box" id="preview-box-right" style="height: 110px; display: flex; align-items: center; justify-content: center; background: #f1f5f9; border-radius: 8px; margin-bottom: 8px; overflow: hidden;">
+                        <span style="font-size: 28px; opacity: 0.5;">➡️</span>
+                    </div>
+                    <input type="file" name="right_image" id="input-right-image" accept="image/*" style="font-size: 11px; width: 100%;" onchange="previewUploadImage(this, 'preview-box-right')">
                 </div>
-                <div>
-                    <label style="font-size: 12px; font-weight: 600; color: #64748b;">5. Top/Detail (Optional)</label>
-                    <input type="file" name="top_image" accept="image/*" style="font-size: 12px;">
+
+                <div class="photo-upload-slot" id="slot-top" style="border: 2px dashed #cbd5e1; border-radius: 10px; padding: 12px; background: #ffffff; text-align: center;">
+                    <label style="font-size: 12px; font-weight: 600; color: #475569; display: block; margin-bottom: 6px;">5. Top/Detail View (Optional)</label>
+                    <div class="preview-box" id="preview-box-top" style="height: 110px; display: flex; align-items: center; justify-content: center; background: #f1f5f9; border-radius: 8px; margin-bottom: 8px; overflow: hidden;">
+                        <span style="font-size: 28px; opacity: 0.5;">🔍</span>
+                    </div>
+                    <input type="file" name="top_image" id="input-top-image" accept="image/*" style="font-size: 11px; width: 100%;" onchange="previewUploadImage(this, 'preview-box-top')">
                 </div>
             </div>
+
+            <!-- Multi-Select Batch Upload Option -->
+            <div style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <strong style="font-size: 12px; color: #1e293b;">⚡ Or Select Multiple Photos at Once:</strong>
+                    <div style="font-size: 11px; color: #64748b;">Pick up to 5 additional gallery photos directly from your camera roll / files.</div>
+                </div>
+                <input type="file" name="photos" id="input-multi-photos" accept="image/*" multiple style="font-size: 12px;" onchange="previewMultiUploadPhotos(this)">
+            </div>
+            <div id="batch-preview-container" style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;"></div>
         </div>
+
+        <script>
+        function previewUploadImage(input, previewBoxId) {
+            const box = document.getElementById(previewBoxId);
+            if (!box) return;
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    box.innerHTML = `<img src="${e.target.result}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 6px;" alt="Preview">`;
+                    const slot = box.closest('.photo-upload-slot');
+                    if (slot) {
+                        slot.style.borderColor = '#16a34a';
+                        slot.style.backgroundColor = '#f0fdf4';
+                    }
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function previewMultiUploadPhotos(input) {
+            const container = document.getElementById('batch-preview-container');
+            if (!container) return;
+            container.innerHTML = '';
+            if (input.files) {
+                Array.from(input.files).forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const thumb = document.createElement('div');
+                        thumb.style.width = '60px';
+                        thumb.style.height = '60px';
+                        thumb.style.borderRadius = '6px';
+                        thumb.style.overflow = 'hidden';
+                        thumb.style.border = '2px solid #16a34a';
+                        thumb.style.flexShrink = '0';
+                        thumb.innerHTML = `<img src="${e.target.result}" style="width: 100%; height: 100%; object-fit: cover;">`;
+                        container.appendChild(thumb);
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+        }
+        </script>
 
         <button type="submit" id="btn-upload-submit" class="btn-primary" style="width: 100%; padding: 14px; font-size: 15px;">
             Publish Verified Product Listing

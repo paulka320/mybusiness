@@ -260,7 +260,106 @@ function clearCart() {
     renderCheckoutPage();
 }
 
+function setupProductGallery() {
+    const stage = document.getElementById('product-gallery-stage');
+    if (!stage) return;
+
+    const slides = stage.querySelectorAll('.gallery-slide-img');
+    const prevBtn = document.getElementById('gallery-btn-prev');
+    const nextBtn = document.getElementById('gallery-btn-next');
+    const badgeSpan = document.querySelector('#gallery-angle-badge span');
+    const thumbBtns = document.querySelectorAll('.gallery-thumb-btn');
+
+    if (slides.length === 0) return;
+
+    let currentIndex = 0;
+
+    function goToIndex(index) {
+        if (index < 0) {
+            index = slides.length - 1;
+        } else if (index >= slides.length) {
+            index = 0;
+        }
+        currentIndex = index;
+
+        slides.forEach((slide, idx) => {
+            slide.classList.toggle('active', idx === currentIndex);
+        });
+
+        thumbBtns.forEach((btn, idx) => {
+            const isActive = idx === currentIndex;
+            btn.classList.toggle('active', isActive);
+            if (isActive) {
+                btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            }
+        });
+
+        if (badgeSpan) {
+            const activeThumb = document.querySelector(`.gallery-thumb-btn[data-index="${currentIndex}"]`);
+            if (activeThumb && activeThumb.dataset.label) {
+                badgeSpan.textContent = activeThumb.dataset.label;
+            } else {
+                badgeSpan.textContent = `Angle ${currentIndex + 1} of ${slides.length}`;
+            }
+        }
+    }
+
+    if (prevBtn) {
+        prevBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            goToIndex(currentIndex - 1);
+        });
+    }
+
+    if (nextBtn) {
+        nextBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            goToIndex(currentIndex + 1);
+        });
+    }
+
+    thumbBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const idx = parseInt(btn.dataset.index, 10);
+            if (!isNaN(idx)) {
+                goToIndex(idx);
+            }
+        });
+    });
+
+    // Keyboard Arrow navigation for desktop
+    document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.key === 'ArrowLeft') {
+            goToIndex(currentIndex - 1);
+        } else if (e.key === 'ArrowRight') {
+            goToIndex(currentIndex + 1);
+        }
+    });
+
+    // Touch swipe support on mobile
+    let touchStartX = 0;
+    let touchEndX = 0;
+    stage.addEventListener('touchstart', (e) => {
+        touchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
+
+    stage.addEventListener('touchend', (e) => {
+        touchEndX = e.changedTouches[0].screenX;
+        const diff = touchEndX - touchStartX;
+        if (Math.abs(diff) > 40) {
+            if (diff > 0) {
+                goToIndex(currentIndex - 1);
+            } else {
+                goToIndex(currentIndex + 1);
+            }
+        }
+    }, { passive: true });
+}
+
 function setupCarousel() {
+    setupProductGallery();
     document.querySelectorAll('.image-carousel').forEach(carousel => {
         const images = carousel.querySelectorAll('.carousel-image');
         if (images.length <= 1) return;
