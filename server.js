@@ -347,12 +347,24 @@ app.get(['/product.php', '/product'], async (req, res) => {
   try {
     const id = parseInt(req.query.id, 10) || 0;
     const product = await db.getProductById(id);
-    if (!product || product.approved !== 1 || product.quantity <= 0) {
+    if (!product) {
+      return res.redirect('index.php');
+    }
+
+    const userId = req.session ? req.session.user_id : null;
+    const isAdmin = req.session && req.session.is_admin === 1;
+    const isOwner = !!(userId && product.seller_id === userId);
+
+    // If product is unapproved or sold out (0 stock), only allow admin or product owner to view
+    if ((product.approved !== 1 || product.quantity <= 0) && !isAdmin && !isOwner) {
       return res.redirect('index.php');
     }
 
     const images = await db.getProductImages(id);
-    const similar = (await db.getProducts(p => p.category_id === product.category_id && p.id !== id && p.approved === 1)).slice(0, 4);
+    const similar = (await db.getProducts(p => p.category_id === product.category_id && p.id !== id && p.approved === 1 && p.quantity > 0)).slice(0, 4);
+
+    // Pending price request if any
+    const pendingPriceRequest = await db.getPendingPriceChangeRequestsForProduct(id);
 
     // Formatted WhatsApp URL for Uganda
     const waNumber = db.sanitizeWhatsAppNumber(product.whatsapp_number || product.phone);
@@ -364,7 +376,10 @@ app.get(['/product.php', '/product'], async (req, res) => {
       images,
       similar,
       waLink,
-      waNumber
+      waNumber,
+      isOwner,
+      isAdmin,
+      pendingPriceRequest
     });
   } catch (err) {
     console.error('Error loading product:', err);
@@ -1065,6 +1080,84 @@ app.post(['/admin_register.php', '/admin_register'], async (req, res) => {
 });
 
 // ----------------------------------------------------
+// SELLER / USER PRODUCT & PRICE MANAGEMENT SUITE
+// ----------------------------------------------------
+
+// Seller: View My Published Products & Pricing Proposals
+app.get(['/my_products.php', '/my_products', '/seller/products'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.redirect('/login.php?return=my_products.php');
+  }
+
+  const userId = req.session.user_id;
+  const products = await db.getProductsBySeller(userId);
+  const pendingRequests = await db.getPendingPriceChangeRequestsForSeller(userId);
+  const feedback = req.session.sellerFeedback || null;
+  req.session.sellerFeedback = null;
+
+  res.render('my_products', {
+    products,
+    pendingRequests,
+    feedback
+  });
+});
+
+// Seller: Direct Price & Stock Update (Only publisher can change their own price)
+app.post(['/seller/update-price', '/my_products/update-price'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.redirect('/login.php?return=my_products.php');
+  }
+
+  const productId = parseInt(req.body.product_id, 10);
+  const price = req.body.price;
+  const quantity = req.body.quantity;
+
+  const result = await db.updateProductPriceBySeller(productId, req.session.user_id, price, quantity);
+  if (result.success) {
+    req.session.sellerFeedback = {
+      type: 'success',
+      message: `✅ Listing updated successfully! Active price is now UGX ${Number(result.newPrice).toLocaleString()}.`
+    };
+  } else {
+    req.session.sellerFeedback = {
+      type: 'error',
+      message: `❌ ${result.error || 'Failed to update listing.'}`
+    };
+  }
+
+  req.session.save(() => {
+    res.redirect('/my_products.php');
+  });
+});
+
+// Seller: Respond to Admin Price Proposal (Accept / Decline)
+app.post(['/seller/price-request/respond', '/price-request/respond'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.redirect('/login.php?return=my_products.php');
+  }
+
+  const requestId = parseInt(req.body.request_id, 10);
+  const decision = req.body.decision; // 'Accepted' or 'Rejected'
+
+  const result = await db.resolvePriceChangeRequest(requestId, decision, req.session.user_id);
+  if (result.success) {
+    req.session.sellerFeedback = {
+      type: result.decision === 'Accepted' ? 'success' : 'info',
+      message: result.message
+    };
+  } else {
+    req.session.sellerFeedback = {
+      type: 'error',
+      message: result.error
+    };
+  }
+
+  req.session.save(() => {
+    res.redirect('/my_products.php');
+  });
+});
+
+// ----------------------------------------------------
 // ADMIN DASHBOARD & MANAGEMENT SUITE
 // ----------------------------------------------------
 
@@ -1074,16 +1167,40 @@ app.get(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
   }
 
   const allProducts = (await db.getProducts()).sort((a, b) => b.id - a.id);
+  const availableProducts = allProducts.filter(p => p.quantity > 0 && p.approved === 1);
+  const soldProducts = allProducts.filter(p => p.quantity <= 0);
+  const priceRequests = await db.getAllPriceChangeRequests();
+  const pendingPriceRequests = priceRequests.filter(r => r.status === 'Pending');
+
   const stats = await db.getSystemStats();
   const activeTab = req.query.tab || 'overview';
+  const filter = req.query.filter || 'all';
+
+  let displayedProducts = allProducts;
+  if (filter === 'available') {
+    displayedProducts = availableProducts;
+  } else if (filter === 'sold') {
+    displayedProducts = soldProducts;
+  }
+
   const syncResult = req.session.syncResult || null;
   req.session.syncResult = null;
 
+  const adminFeedback = req.session.adminFeedback || null;
+  req.session.adminFeedback = null;
+
   res.render('admin_dashboard', {
-    products: allProducts,
+    products: displayedProducts,
+    allProductsCount: allProducts.length,
+    availableCount: availableProducts.length,
+    soldCount: soldProducts.length,
+    pendingPriceCount: pendingPriceRequests.length,
+    priceRequests,
+    filter,
     stats,
     activeTab,
-    syncResult
+    syncResult,
+    adminFeedback
   });
 });
 
@@ -1116,7 +1233,7 @@ app.post(['/admin_dashboard.php/order-status', '/admin_dashboard/order-status', 
   res.redirect('/admin_dashboard?tab=orders');
 });
 
-// Admin: Quick Product Edit
+// Admin: Quick Product Edit & Protected Price Change Proposal Engine
 app.post(['/admin_dashboard.php/quick-product', '/admin_dashboard/quick-product', '/admin_dashboard.php/admin_dashboard.php/quick-product'], async (req, res) => {
   if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
     return res.redirect('/admin_login.php');
@@ -1124,18 +1241,22 @@ app.post(['/admin_dashboard.php/quick-product', '/admin_dashboard/quick-product'
 
   const productId = parseInt(req.body.product_id, 10);
   if (productId) {
-    await db.quickUpdateProduct(productId, {
+    const result = await db.adminUpdateProductOrProposePrice(productId, req.session.user_id, {
       title: req.body.title,
       price: req.body.price,
       quantity: req.body.quantity,
-      approved: req.body.approved
+      approved: req.body.approved,
+      reason: req.body.reason || 'Admin recommended price adjustment'
     });
+    req.session.adminFeedback = result.message;
   }
 
-  res.redirect('/admin_dashboard?tab=inventory');
+  req.session.save(() => {
+    res.redirect('/admin_dashboard?tab=inventory');
+  });
 });
 
-// Admin: Delete Product
+// Admin: Delete Single Product (Available or Sold)
 app.post(['/admin_dashboard.php/delete-product', '/admin_dashboard/delete-product', '/admin/delete-product'], async (req, res) => {
   if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
     return res.redirect('/admin_login.php');
@@ -1144,9 +1265,32 @@ app.post(['/admin_dashboard.php/delete-product', '/admin_dashboard/delete-produc
   const productId = parseInt(req.body.product_id, 10);
   if (productId) {
     await db.deleteProduct(productId);
+    req.session.adminFeedback = `Product #${productId} listing deleted successfully.`;
   }
 
-  res.redirect('/admin_dashboard?tab=inventory');
+  req.session.save(() => {
+    res.redirect('/admin_dashboard?tab=inventory');
+  });
+});
+
+// Admin: Delete All Sold Products in Bulk
+app.post(['/admin_dashboard.php/delete-sold-products', '/admin_dashboard/delete-sold-products', '/admin/delete-sold-products'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const sold = await db.getSoldProducts();
+  let count = 0;
+  for (const p of sold) {
+    await db.deleteProduct(p.id);
+    count++;
+  }
+
+  req.session.adminFeedback = `Cleaned up catalog: Successfully deleted ${count} sold/out-of-stock product listing(s).`;
+
+  req.session.save(() => {
+    res.redirect('/admin_dashboard?tab=inventory&filter=all');
+  });
 });
 
 // Admin: Reply to Support Ticket

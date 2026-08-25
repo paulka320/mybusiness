@@ -44,6 +44,10 @@
             </a>
             
             <% if (locals.user && locals.user.id) { %>
+                <a href="my_products.php" id="nav-my-products" class="<%= cp.includes('my_products') ? 'active' : '' %>" title="Manage your listings, prices and inventory">
+                    <span>📋 My Listings</span>
+                </a>
+
                 <a href="messages.php" id="nav-messages" class="nav-badge-link <%= isMessages ? 'active' : '' %>" title="Direct In-App Messages">
                     <span>💬 Messages</span>
                     <% if (locals.unreadMsgsCount > 0) { %>

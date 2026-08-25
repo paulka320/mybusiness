@@ -97,6 +97,7 @@ let memMessages = [];
 let memSupportTickets = [];
 let memReturnsRefunds = [];
 let memCampaigns = [];
+let memPriceChangeRequests = [];
 
 let ownerCommissionPercentage = 10; // Default 10% platform share / owner payout
 let dbLastCheckTime = null;
@@ -112,6 +113,7 @@ let memNextMsgId = 3;
 let memNextTicketId = 2;
 let memNextReturnId = 2;
 let memNextCampaignId = 3;
+let memNextPriceRequestId = 1;
 
 // Initialize Supabase/PostgreSQL schema with automatic column & schema migration
 async function initDatabase() {
@@ -247,6 +249,19 @@ async function initDatabase() {
           start_date VARCHAR(50),
           end_date VARCHAR(50)
         );
+
+        CREATE TABLE IF NOT EXISTS price_change_requests (
+          id SERIAL PRIMARY KEY,
+          product_id INT NOT NULL,
+          seller_id INT NOT NULL,
+          requested_by INT NOT NULL,
+          current_price NUMERIC(15,2) NOT NULL,
+          proposed_price NUMERIC(15,2) NOT NULL,
+          reason TEXT,
+          status VARCHAR(50) DEFAULT 'Pending',
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          resolved_at TIMESTAMPTZ
+        );
       `);
 
       // 2. Safely ALTER existing Supabase tables so all columns are present (compatible with both pre-existing Supabase tables and our schema)
@@ -284,7 +299,14 @@ async function initDatabase() {
         "ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS user_name VARCHAR(255)",
         "ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS user_email VARCHAR(255)",
         "ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS admin_reply TEXT",
-        "ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP"
+        "ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
+
+        // price_change_requests table
+        "ALTER TABLE price_change_requests ADD COLUMN IF NOT EXISTS current_price NUMERIC(15,2) DEFAULT 0",
+        "ALTER TABLE price_change_requests ADD COLUMN IF NOT EXISTS proposed_price NUMERIC(15,2) DEFAULT 0",
+        "ALTER TABLE price_change_requests ADD COLUMN IF NOT EXISTS reason TEXT",
+        "ALTER TABLE price_change_requests ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Pending'",
+        "ALTER TABLE price_change_requests ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ"
       ];
 
       for (const sql of columnAlterStatements) {
@@ -650,6 +672,20 @@ const db = {
     return newProdId;
   },
 
+  async getAvailableProducts() {
+    return this.getProducts(p => p.quantity > 0 && (p.approved === 1 || p.approved === true));
+  },
+
+  async getSoldProducts() {
+    return this.getProducts(p => p.quantity <= 0);
+  },
+
+  async getProductsBySeller(sellerId) {
+    const sId = parseInt(sellerId, 10);
+    if (!sId) return [];
+    return this.getProducts(p => p.seller_id === sId);
+  },
+
   async quickUpdateProduct(productId, { title, price, quantity, approved }) {
     if (isConnectedToPostgres && pool) {
       await pool.query(`
@@ -673,6 +709,367 @@ const db = {
     }
   },
 
+  // Seller Price Update (Only publisher/seller can change their own product's price)
+  async updateProductPriceBySeller(productId, sellerId, newPrice, newQuantity = null) {
+    const pId = parseInt(productId, 10);
+    const sId = parseInt(sellerId, 10);
+    const parsedPrice = parseFloat(newPrice);
+
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      return { success: false, error: 'Price must be a valid positive number.' };
+    }
+
+    const prod = await this.getProductById(pId);
+    if (!prod) {
+      return { success: false, error: 'Product not found.' };
+    }
+
+    // Security check: Must be the owner/seller who published it
+    if (prod.seller_id && prod.seller_id !== sId) {
+      return { success: false, error: 'Permission Denied: You can only edit prices of products that you published.' };
+    }
+
+    if (isConnectedToPostgres && pool) {
+      let q = 'UPDATE products SET price = $1';
+      const params = [parsedPrice];
+      if (newQuantity !== null && !isNaN(parseInt(newQuantity, 10))) {
+        params.push(Math.max(0, parseInt(newQuantity, 10)));
+        q += `, quantity = $${params.length}`;
+      }
+      params.push(pId);
+      q += ` WHERE id = $${params.length}`;
+      await pool.query(q, params);
+    } else {
+      const mProd = memProducts.find(p => p.id === pId);
+      if (mProd) {
+        mProd.price = parsedPrice;
+        if (newQuantity !== null && !isNaN(parseInt(newQuantity, 10))) {
+          mProd.quantity = Math.max(0, parseInt(newQuantity, 10));
+        }
+      }
+    }
+
+    // Auto-resolve any pending price change requests for this product
+    await this.cancelPendingPriceRequestsForProduct(pId, 'Seller updated price directly');
+
+    return { success: true, newPrice: parsedPrice };
+  },
+
+  // Admin Product Update with Seller Price Protection:
+  // Admin CANNOT change price without owner accepting, so if price changed and product belongs to another seller, create a proposal!
+  async adminUpdateProductOrProposePrice(productId, adminUserId, { title, price, quantity, approved, reason = '' }) {
+    const pId = parseInt(productId, 10);
+    const prod = await this.getProductById(pId);
+    if (!prod) {
+      return { success: false, error: 'Product not found.' };
+    }
+
+    const parsedPrice = price !== undefined ? parseFloat(price) : prod.price;
+    const parsedQty = quantity !== undefined ? Math.max(0, parseInt(quantity, 10)) : prod.quantity;
+    const parsedApproved = approved !== undefined ? parseInt(approved, 10) : prod.approved;
+
+    let priceProposalCreated = false;
+    let priceProposalId = null;
+
+    // Check if price is being changed on a product published by someone else
+    const isPriceChanged = !isNaN(parsedPrice) && Math.round(parsedPrice) !== Math.round(prod.price);
+    const isOwnedByDifferentSeller = prod.seller_id && prod.seller_id !== adminUserId && prod.seller_id !== 1;
+
+    if (isPriceChanged && isOwnedByDifferentSeller) {
+      // Create price change request for the seller to review & accept
+      const reqRes = await this.createPriceChangeRequest({
+        productId: pId,
+        sellerId: prod.seller_id,
+        requestedBy: adminUserId || 1,
+        currentPrice: prod.price,
+        proposedPrice: parsedPrice,
+        reason: reason || 'Market price alignment recommended by Admin'
+      });
+      priceProposalCreated = true;
+      priceProposalId = reqRes.id;
+
+      // Update non-price fields directly
+      await this.quickUpdateProduct(pId, {
+        title: title || prod.title,
+        price: prod.price, // Keep original price until seller accepts
+        quantity: parsedQty,
+        approved: parsedApproved
+      });
+
+      return {
+        success: true,
+        priceProposalCreated: true,
+        proposedPrice: parsedPrice,
+        currentPrice: prod.price,
+        message: `Price proposal of UGX ${Number(parsedPrice).toLocaleString()} submitted to Seller #${prod.seller_id}. Per marketplace policy, the product owner must accept before the price updates.`
+      };
+    } else {
+      // Admin published it or price wasn't changed: direct update
+      await this.quickUpdateProduct(pId, {
+        title: title || prod.title,
+        price: parsedPrice,
+        quantity: parsedQty,
+        approved: parsedApproved
+      });
+
+      return {
+        success: true,
+        priceProposalCreated: false,
+        message: 'Product details updated successfully.'
+      };
+    }
+  },
+
+  // Price Change Proposal Engine
+  async createPriceChangeRequest({ productId, sellerId, requestedBy, currentPrice, proposedPrice, reason }) {
+    const prod = await this.getProductById(productId);
+    const prodTitle = prod ? prod.title : `Product #${productId}`;
+
+    if (isConnectedToPostgres && pool) {
+      const res = await pool.query(`
+        INSERT INTO price_change_requests (product_id, seller_id, requested_by, current_price, proposed_price, reason, status)
+        VALUES ($1, $2, $3, $4, $5, $6, 'Pending')
+        RETURNING *
+      `, [productId, sellerId, requestedBy, currentPrice, proposedPrice, reason]);
+      
+      const reqObj = res.rows[0];
+
+      // Notify the product owner
+      await this.createNotification({
+        userId: sellerId,
+        title: '🏷️ Price Change Proposal from Admin',
+        message: `Admin proposed changing the price of your product "${prodTitle}" from UGX ${Number(currentPrice).toLocaleString()} to UGX ${Number(proposedPrice).toLocaleString()}. Reason: ${reason || 'Market alignment'}. Please review and Accept or Decline in My Listings.`,
+        type: 'price_proposal'
+      });
+
+      return reqObj;
+    }
+
+    const newReq = {
+      id: memNextPriceRequestId++,
+      product_id: productId,
+      seller_id: sellerId,
+      requested_by: requestedBy,
+      current_price: currentPrice,
+      proposed_price: proposedPrice,
+      reason: reason || 'Market alignment',
+      status: 'Pending',
+      created_at: new Date(),
+      resolved_at: null
+    };
+    memPriceChangeRequests.unshift(newReq);
+
+    // Notify seller
+    await this.createNotification({
+      userId: sellerId,
+      title: '🏷️ Price Change Proposal from Admin',
+      message: `Admin proposed changing the price of your product "${prodTitle}" from UGX ${Number(currentPrice).toLocaleString()} to UGX ${Number(proposedPrice).toLocaleString()}. Reason: ${reason || 'Market alignment'}. Please review and Accept or Decline in My Listings.`,
+      type: 'price_proposal'
+    });
+
+    return newReq;
+  },
+
+  async getPendingPriceChangeRequestsForSeller(sellerId) {
+    const sId = parseInt(sellerId, 10);
+    if (!sId) return [];
+
+    if (isConnectedToPostgres && pool) {
+      const res = await pool.query(`
+        SELECT pcr.*, p.title as product_title, p.image as product_image, p.price as current_live_price, p.quantity as product_quantity
+        FROM price_change_requests pcr
+        LEFT JOIN products p ON pcr.product_id = p.id
+        WHERE pcr.seller_id = $1 AND pcr.status = 'Pending'
+        ORDER BY pcr.id DESC
+      `, [sId]);
+      return res.rows.map(r => ({
+        ...r,
+        current_price: parseFloat(r.current_price),
+        proposed_price: parseFloat(r.proposed_price)
+      }));
+    }
+
+    return memPriceChangeRequests
+      .filter(r => r.seller_id === sId && r.status === 'Pending')
+      .map(r => {
+        const p = memProducts.find(prod => prod.id === r.product_id);
+        return {
+          ...r,
+          product_title: p ? p.title : `Product #${r.product_id}`,
+          product_image: p ? p.image : 'phone-front.svg',
+          current_live_price: p ? p.price : r.current_price,
+          product_quantity: p ? p.quantity : 1
+        };
+      });
+  },
+
+  async getPendingPriceChangeRequestsForProduct(productId) {
+    const pId = parseInt(productId, 10);
+    if (!pId) return null;
+
+    if (isConnectedToPostgres && pool) {
+      const res = await pool.query(`
+        SELECT * FROM price_change_requests WHERE product_id = $1 AND status = 'Pending' ORDER BY id DESC LIMIT 1
+      `, [pId]);
+      return res.rows[0] || null;
+    }
+
+    return memPriceChangeRequests.find(r => r.product_id === pId && r.status === 'Pending') || null;
+  },
+
+  async getAllPriceChangeRequests() {
+    if (isConnectedToPostgres && pool) {
+      const res = await pool.query(`
+        SELECT pcr.*, p.title as product_title, p.image as product_image, u.name as seller_name, u.email as seller_email, u.phone as seller_phone
+        FROM price_change_requests pcr
+        LEFT JOIN products p ON pcr.product_id = p.id
+        LEFT JOIN users u ON pcr.seller_id = u.id
+        ORDER BY pcr.id DESC
+      `);
+      return res.rows.map(r => ({
+        ...r,
+        current_price: parseFloat(r.current_price),
+        proposed_price: parseFloat(r.proposed_price)
+      }));
+    }
+
+    return memPriceChangeRequests.map(r => {
+      const p = memProducts.find(prod => prod.id === r.product_id);
+      const u = memUsers.find(user => user.id === r.seller_id);
+      return {
+        ...r,
+        product_title: p ? p.title : `Product #${r.product_id}`,
+        product_image: p ? p.image : 'phone-front.svg',
+        seller_name: u ? u.name : 'Seller #' + r.seller_id,
+        seller_email: u ? u.email : '',
+        seller_phone: u ? u.phone : ''
+      };
+    });
+  },
+
+  async resolvePriceChangeRequest(requestId, decision, sellerUserId) {
+    const reqId = parseInt(requestId, 10);
+    const sId = parseInt(sellerUserId, 10);
+    const validDecision = decision === 'Accepted' ? 'Accepted' : 'Rejected';
+
+    let request = null;
+    if (isConnectedToPostgres && pool) {
+      const res = await pool.query('SELECT * FROM price_change_requests WHERE id = $1', [reqId]);
+      request = res.rows[0] || null;
+    } else {
+      request = memPriceChangeRequests.find(r => r.id === reqId) || null;
+    }
+
+    if (!request) {
+      return { success: false, error: 'Price proposal request not found.' };
+    }
+
+    if (request.status !== 'Pending') {
+      return { success: false, error: `This price request has already been ${request.status.toLowerCase()}.` };
+    }
+
+    // Security check: Only product owner / seller can accept or reject
+    if (request.seller_id && request.seller_id !== sId) {
+      return { success: false, error: 'Access Denied: Only the owner of this product can accept or decline price changes.' };
+    }
+
+    const prod = await this.getProductById(request.product_id);
+    const prodTitle = prod ? prod.title : `Product #${request.product_id}`;
+    const newPrice = parseFloat(request.proposed_price);
+
+    if (validDecision === 'Accepted') {
+      // 1. Update live product price
+      if (isConnectedToPostgres && pool) {
+        await pool.query('UPDATE products SET price = $1 WHERE id = $2', [newPrice, request.product_id]);
+        await pool.query('UPDATE price_change_requests SET status = $1, resolved_at = NOW() WHERE id = $2', ['Accepted', reqId]);
+      } else {
+        if (prod) prod.price = newPrice;
+        const mProd = memProducts.find(p => p.id === request.product_id);
+        if (mProd) mProd.price = newPrice;
+        request.status = 'Accepted';
+        request.resolved_at = new Date();
+      }
+
+      // 2. Notifications
+      await this.createNotification({
+        userId: sId,
+        title: '✅ Price Adjustment Confirmed',
+        message: `You accepted the proposed price for "${prodTitle}". The live marketplace price is now UGX ${Number(newPrice).toLocaleString()}.`,
+        type: 'price_update'
+      });
+
+      // Notify Admin
+      const adminUsers = await this.getAdminUsers();
+      for (const admin of adminUsers) {
+        await this.createNotification({
+          userId: admin.id,
+          title: '🎉 Seller Accepted Price Change',
+          message: `Seller has accepted the price proposal for "${prodTitle}". Live price updated to UGX ${Number(newPrice).toLocaleString()}.`,
+          type: 'price_approved'
+        });
+      }
+
+      return {
+        success: true,
+        decision: 'Accepted',
+        newPrice,
+        message: `Price successfully updated to UGX ${Number(newPrice).toLocaleString()}!`
+      };
+    } else {
+      // Rejected
+      if (isConnectedToPostgres && pool) {
+        await pool.query('UPDATE price_change_requests SET status = $1, resolved_at = NOW() WHERE id = $2', ['Rejected', reqId]);
+      } else {
+        request.status = 'Rejected';
+        request.resolved_at = new Date();
+      }
+
+      await this.createNotification({
+        userId: sId,
+        title: '❌ Price Proposal Declined',
+        message: `You declined the proposed price for "${prodTitle}". The price remains UGX ${Number(request.current_price).toLocaleString()}.`,
+        type: 'price_rejected'
+      });
+
+      const adminUsers = await this.getAdminUsers();
+      for (const admin of adminUsers) {
+        await this.createNotification({
+          userId: admin.id,
+          title: '⚠️ Seller Declined Price Proposal',
+          message: `Seller declined the price proposal of UGX ${Number(request.proposed_price).toLocaleString()} for "${prodTitle}". Price remains UGX ${Number(request.current_price).toLocaleString()}.`,
+          type: 'price_rejected'
+        });
+      }
+
+      return {
+        success: true,
+        decision: 'Rejected',
+        message: 'Price proposal was declined. Product price remains unchanged.'
+      };
+    }
+  },
+
+  async cancelPendingPriceRequestsForProduct(productId, reason = 'Cancelled') {
+    if (isConnectedToPostgres && pool) {
+      await pool.query("UPDATE price_change_requests SET status = 'Cancelled', resolved_at = NOW() WHERE product_id = $1 AND status = 'Pending'", [productId]);
+    } else {
+      memPriceChangeRequests.forEach(r => {
+        if (r.product_id === productId && r.status === 'Pending') {
+          r.status = 'Cancelled';
+          r.resolved_at = new Date();
+        }
+      });
+    }
+  },
+
+  async getAdminUsers() {
+    if (isConnectedToPostgres && pool) {
+      const res = await pool.query("SELECT * FROM users WHERE is_admin = 1 OR role = 'admin' OR LOWER(email) = $1", [ADMIN_USERNAME.toLowerCase()]);
+      return res.rows;
+    }
+    return memUsers.filter(u => u.is_admin === 1 || u.role === 'admin' || u.email.toLowerCase() === ADMIN_USERNAME.toLowerCase());
+  },
+
   async updateProductQuantity(productId, quantity) {
     const approved = quantity > 0 ? 1 : 0;
     if (isConnectedToPostgres && pool) {
@@ -690,13 +1087,20 @@ const db = {
   },
 
   async deleteProduct(productId) {
+    const pId = parseInt(productId, 10);
+    if (!pId) return;
+
     if (isConnectedToPostgres && pool) {
-      await pool.query('DELETE FROM product_images WHERE product_id = $1', [productId]);
-      await pool.query('DELETE FROM products WHERE id = $1', [productId]);
+      try {
+        await pool.query('DELETE FROM price_change_requests WHERE product_id = $1', [pId]);
+      } catch {}
+      await pool.query('DELETE FROM product_images WHERE product_id = $1', [pId]);
+      await pool.query('DELETE FROM products WHERE id = $1', [pId]);
       return;
     }
-    memProducts = memProducts.filter(p => p.id !== productId);
-    memProductImages = memProductImages.filter(img => img.product_id !== productId);
+    memPriceChangeRequests = memPriceChangeRequests.filter(r => r.product_id !== pId);
+    memProducts = memProducts.filter(p => p.id !== pId);
+    memProductImages = memProductImages.filter(img => img.product_id !== pId);
   },
 
   async findUserByEmailOrUsername(emailOrUsername) {
