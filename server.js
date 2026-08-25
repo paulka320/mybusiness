@@ -1076,11 +1076,14 @@ app.get(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
   const allProducts = (await db.getProducts()).sort((a, b) => b.id - a.id);
   const stats = await db.getSystemStats();
   const activeTab = req.query.tab || 'overview';
+  const syncResult = req.session.syncResult || null;
+  req.session.syncResult = null;
 
   res.render('admin_dashboard', {
     products: allProducts,
     stats,
-    activeTab
+    activeTab,
+    syncResult
   });
 });
 
@@ -1178,6 +1181,24 @@ app.post(['/admin_dashboard.php/return-status', '/admin_dashboard/return-status'
   }
 
   res.redirect('/admin_dashboard?tab=orders');
+});
+
+// Admin: Force Sync Database & Validate PostgreSQL/Supabase Tables
+app.post(['/admin_dashboard.php/sync-database', '/admin_dashboard/sync-database', '/admin/sync-database'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  try {
+    const result = await db.syncDatabase();
+    req.session.syncResult = result;
+  } catch (err) {
+    req.session.syncResult = { success: false, error: err.message };
+  }
+
+  req.session.save(() => {
+    res.redirect('/admin_dashboard?tab=overview&synced=1');
+  });
 });
 
 // Admin legacy stock/delete handler

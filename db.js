@@ -113,19 +113,21 @@ let memNextTicketId = 2;
 let memNextReturnId = 2;
 let memNextCampaignId = 3;
 
-// Initialize Supabase/PostgreSQL schema
+// Initialize Supabase/PostgreSQL schema with automatic column & schema migration
 async function initDatabase() {
   if (!pool) return;
 
   try {
     const client = await pool.connect();
     try {
-      console.log('Testing Supabase / PostgreSQL connection...');
+      console.log('Testing Supabase / PostgreSQL connection & migrating schema...');
+      
+      // 1. Create tables if they do not exist
       await client.query(`
         CREATE TABLE IF NOT EXISTS categories (
           id SERIAL PRIMARY KEY,
           name VARCHAR(255) NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS users (
@@ -133,11 +135,12 @@ async function initDatabase() {
           name VARCHAR(255) NOT NULL,
           email VARCHAR(255) UNIQUE NOT NULL,
           password_hash VARCHAR(255) NOT NULL,
+          role VARCHAR(50) DEFAULT 'customer',
+          is_admin INT DEFAULT 0,
           phone VARCHAR(100),
           whatsapp_number VARCHAR(100),
           has_whatsapp BOOLEAN DEFAULT TRUE,
-          is_admin INT DEFAULT 0,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS products (
@@ -146,38 +149,42 @@ async function initDatabase() {
           description TEXT,
           price NUMERIC(15,2) NOT NULL DEFAULT 0,
           image VARCHAR(255),
-          category_id INT REFERENCES categories(id) ON DELETE SET NULL,
-          location VARCHAR(255),
+          image_url TEXT,
+          category_id INT,
+          location VARCHAR(255) DEFAULT 'Kampala, Uganda',
+          condition VARCHAR(100) DEFAULT 'Brand New',
           phone VARCHAR(100),
+          seller_phone VARCHAR(100),
           whatsapp_number VARCHAR(100),
           payment_code VARCHAR(100),
           approved INT DEFAULT 1,
           quantity INT DEFAULT 1,
-          seller_id INT REFERENCES users(id) ON DELETE SET NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          seller_id INT,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS product_images (
           id SERIAL PRIMARY KEY,
-          product_id INT REFERENCES products(id) ON DELETE CASCADE,
-          image_path VARCHAR(255) NOT NULL,
-          is_main INT DEFAULT 0
+          product_id INT,
+          image_path VARCHAR(255),
+          image_url TEXT,
+          is_main BOOLEAN DEFAULT FALSE
         );
 
         CREATE TABLE IF NOT EXISTS orders (
           id SERIAL PRIMARY KEY,
-          user_id INT REFERENCES users(id) ON DELETE SET NULL,
+          user_id INT,
           total NUMERIC(15,2) NOT NULL DEFAULT 0,
           status VARCHAR(50) DEFAULT 'Pending',
           address TEXT,
           phone VARCHAR(100),
           payment_reference VARCHAR(255),
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS order_items (
           id SERIAL PRIMARY KEY,
-          order_id INT REFERENCES orders(id) ON DELETE CASCADE,
+          order_id INT,
           product_id INT,
           title VARCHAR(255) NOT NULL,
           price NUMERIC(15,2) NOT NULL,
@@ -187,46 +194,46 @@ async function initDatabase() {
 
         CREATE TABLE IF NOT EXISTS notifications (
           id SERIAL PRIMARY KEY,
-          user_id INT REFERENCES users(id) ON DELETE CASCADE,
+          user_id INT,
           title VARCHAR(255) NOT NULL,
           message TEXT NOT NULL,
           type VARCHAR(50) DEFAULT 'system',
           is_read INT DEFAULT 0,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS messages (
           id SERIAL PRIMARY KEY,
-          sender_id INT REFERENCES users(id) ON DELETE CASCADE,
-          receiver_id INT REFERENCES users(id) ON DELETE CASCADE,
-          product_id INT REFERENCES products(id) ON DELETE SET NULL,
+          sender_id INT,
+          receiver_id INT,
+          product_id INT,
           message TEXT NOT NULL,
           is_read INT DEFAULT 0,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS support_tickets (
           id SERIAL PRIMARY KEY,
-          user_id INT REFERENCES users(id) ON DELETE SET NULL,
+          user_id INT,
           user_name VARCHAR(255),
           user_email VARCHAR(255),
           subject VARCHAR(255) NOT NULL,
           message TEXT NOT NULL,
           status VARCHAR(50) DEFAULT 'Open',
           admin_reply TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS returns_refunds (
           id SERIAL PRIMARY KEY,
-          order_id INT REFERENCES orders(id) ON DELETE CASCADE,
-          user_id INT REFERENCES users(id) ON DELETE SET NULL,
+          order_id INT,
+          user_id INT,
           reason TEXT NOT NULL,
           amount NUMERIC(15,2) DEFAULT 0,
           status VARCHAR(50) DEFAULT 'Pending',
           admin_note TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS campaigns (
@@ -242,22 +249,172 @@ async function initDatabase() {
         );
       `);
 
-      // Ensure default categories exist if table is empty
+      // 2. Safely ALTER existing Supabase tables so all columns are present (compatible with both pre-existing Supabase tables and our schema)
+      const columnAlterStatements = [
+        // users table
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'customer'",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin INT DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(100)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(100)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS has_whatsapp BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
+
+        // products table
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS image VARCHAR(255)",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS condition VARCHAR(100) DEFAULT 'Brand New'",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS location VARCHAR(255) DEFAULT 'Kampala, Uganda'",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS phone VARCHAR(100)",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS seller_phone VARCHAR(100)",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(100)",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS payment_code VARCHAR(100)",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS approved INT DEFAULT 1",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS quantity INT DEFAULT 1",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS seller_id INT",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS category_id INT",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
+
+        // product_images table (Supports both image_url and image_path)
+        "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS product_id INT",
+        "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS image_path VARCHAR(255)",
+        "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS image_url TEXT",
+        "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS is_main BOOLEAN DEFAULT FALSE",
+
+        // support_tickets table
+        "ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS user_name VARCHAR(255)",
+        "ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS user_email VARCHAR(255)",
+        "ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS admin_reply TEXT",
+        "ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP"
+      ];
+
+      for (const sql of columnAlterStatements) {
+        try {
+          await client.query(sql);
+        } catch (err) {
+          // Non-blocking if column or type already configured
+        }
+      }
+
+      // 3. Ensure default categories exist if table is empty
       const catCountRes = await client.query('SELECT COUNT(*) FROM categories');
       if (parseInt(catCountRes.rows[0].count, 10) === 0) {
         for (const cat of memCategories) {
-          await client.query('INSERT INTO categories (id, name) VALUES ($1, $2)', [cat.id, cat.name]);
+          await client.query('INSERT INTO categories (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING', [cat.id, cat.name]);
         }
-        await client.query("SELECT setval('categories_id_seq', (SELECT MAX(id) FROM categories))");
+        try {
+          await client.query("SELECT setval('categories_id_seq', (SELECT COALESCE(MAX(id), 1) FROM categories))");
+        } catch {}
       }
 
-      // Seed admin user if not already present
+      // 4. Seed admin user if not already present (Dual-setting role='admin' and is_admin=1)
       const userRes = await client.query('SELECT * FROM users WHERE LOWER(email) = $1', [ADMIN_USERNAME.toLowerCase()]);
       if (userRes.rows.length === 0) {
-        await client.query(
-          'INSERT INTO users (name, email, password_hash, is_admin, phone, whatsapp_number) VALUES ($1, $2, $3, $4, $5, $6)',
-          ['EasyMarket Admin', ADMIN_USERNAME.toLowerCase(), adminPasswordHash, 1, '+256 763 480495', '256763480495']
-        );
+        try {
+          await client.query(`
+            INSERT INTO users (name, email, password_hash, role, is_admin, phone, whatsapp_number, has_whatsapp)
+            VALUES ($1, $2, $3, 'admin', 1, '+256 763 480495', '256763480495', TRUE)
+          `, ['EasyMarket Admin', ADMIN_USERNAME.toLowerCase(), adminPasswordHash]);
+        } catch (err) {
+          console.warn('Admin user insert fallback:', err.message);
+          await client.query(`
+            INSERT INTO users (name, email, password_hash, role)
+            VALUES ($1, $2, $3, 'admin')
+          `, ['EasyMarket Admin', ADMIN_USERNAME.toLowerCase(), adminPasswordHash]);
+        }
+      }
+
+      // 5. Seed sample marketplace products if database is empty so Supabase immediately has data
+      const prodCountRes = await client.query('SELECT COUNT(*) FROM products');
+      if (parseInt(prodCountRes.rows[0].count, 10) === 0) {
+        const seedProducts = [
+          {
+            title: 'Apple iPhone 15 Pro Max 256GB Natural Titanium',
+            description: 'Brand new factory sealed authentic Apple iPhone 15 Pro Max with warranty. Includes USB-C cable and full box.',
+            price: 4850000,
+            category_id: 1,
+            phone: '+256 763 480495',
+            whatsapp_number: '256763480495',
+            location: 'Kampala Central, Uganda',
+            payment_code: 'AIRTEL-789012',
+            quantity: 8,
+            condition: 'Brand New (Sealed)',
+            image: 'phone-front.svg',
+            images: ['phone-front.svg', 'phone-back.svg', 'phone-left.svg', 'phone-right.svg', 'phone-top.svg']
+          },
+          {
+            title: 'Samsung Galaxy S24 Ultra 512GB Titanium Gray',
+            description: 'Official Samsung Galaxy S24 Ultra with Galaxy AI, S-Pen stylus, and 200MP Quad Telephoto camera.',
+            price: 4600000,
+            category_id: 1,
+            phone: '+256 701 456789',
+            whatsapp_number: '256701456789',
+            location: 'Garden City, Kampala',
+            payment_code: 'MTN-345678',
+            quantity: 5,
+            condition: 'Brand New (Sealed)',
+            image: 'phone-front.svg',
+            images: ['phone-front.svg', 'phone-back.svg', 'phone-left.svg']
+          },
+          {
+            title: 'Sony WH-1000XM5 Wireless Noise Canceling Headphones',
+            description: 'Industry-leading noise canceling headphones with dual processors and 8 microphones for exceptional call and music quality.',
+            price: 1350000,
+            category_id: 1,
+            phone: '+256 752 987654',
+            whatsapp_number: '256752987654',
+            location: 'Acacia Mall, Kisementi, Kampala',
+            payment_code: 'AIRTEL-556677',
+            quantity: 12,
+            condition: 'Brand New',
+            image: 'phone-front.svg',
+            images: ['phone-front.svg', 'phone-back.svg']
+          },
+          {
+            title: 'Nike Air Max 270 React Premium Sneakers',
+            description: 'Original Nike Air Max sneakers, lightweight foam midsole and all-day maximum impact cushioning.',
+            price: 320000,
+            category_id: 2,
+            phone: '+256 788 123456',
+            whatsapp_number: '256788123456',
+            location: 'Pioneer Mall, Kampala',
+            payment_code: 'MTN-889900',
+            quantity: 15,
+            condition: 'Brand New with Box',
+            image: 'phone-front.svg',
+            images: ['phone-front.svg', 'phone-back.svg', 'phone-left.svg', 'phone-right.svg']
+          },
+          {
+            title: 'Dell XPS 15 9530 Core i9 32GB RAM 1TB SSD RTX 4070',
+            description: 'High performance Dell XPS creator laptop with 3.5K OLED touch display, NVIDIA GeForce RTX graphics, and long battery life.',
+            price: 6800000,
+            category_id: 1,
+            phone: '+256 763 480495',
+            whatsapp_number: '256763480495',
+            location: 'Lugogo Bypass, Kampala',
+            payment_code: 'AIRTEL-998811',
+            quantity: 4,
+            condition: 'Brand New',
+            image: 'phone-front.svg',
+            images: ['phone-front.svg', 'phone-back.svg', 'phone-left.svg']
+          }
+        ];
+
+        for (const prod of seedProducts) {
+          const res = await client.query(`
+            INSERT INTO products (title, description, price, category_id, phone, seller_phone, whatsapp_number, location, condition, image, image_url, payment_code, quantity, approved)
+            VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $9, $10, $11, 1)
+            RETURNING id
+          `, [prod.title, prod.description, prod.price, prod.category_id, prod.phone, prod.whatsapp_number, prod.location, prod.condition, prod.image, prod.payment_code, prod.quantity]);
+          
+          const newId = res.rows[0].id;
+          for (let i = 0; i < prod.images.length; i++) {
+            await client.query(`
+              INSERT INTO product_images (product_id, image_path, image_url, is_main)
+              VALUES ($1, $2, $2, $3)
+            `, [newId, prod.images[i], i === 0]);
+          }
+        }
+        console.log(`✅ Seeded ${seedProducts.length} verified products into Supabase tables.`);
       }
 
       isConnectedToPostgres = true;
@@ -368,21 +525,22 @@ const db = {
 
   async getProductImages(productId) {
     if (isConnectedToPostgres && pool) {
-      const res = await pool.query('SELECT * FROM product_images WHERE product_id = $1 ORDER BY is_main DESC, id ASC', [productId]);
+      const res = await pool.query('SELECT id, product_id, COALESCE(image_url, image_path) AS image_path, COALESCE(image_url, image_path) AS image_url, is_main FROM product_images WHERE product_id = $1 ORDER BY is_main DESC, id ASC', [productId]);
       if (res.rows.length > 0) {
         return res.rows;
       }
-      const prodRes = await pool.query('SELECT image FROM products WHERE id = $1', [productId]);
+      const prodRes = await pool.query('SELECT COALESCE(image_url, image) AS image FROM products WHERE id = $1', [productId]);
       if (prodRes.rows.length > 0 && prodRes.rows[0].image) {
-        return [{ id: 0, product_id: productId, image_path: prodRes.rows[0].image, is_main: 1 }];
+        return [{ id: 0, product_id: productId, image_path: prodRes.rows[0].image, image_url: prodRes.rows[0].image, is_main: 1 }];
       }
       return [];
     }
     const memList = memProductImages.filter(img => img.product_id === productId);
     if (memList.length > 0) return memList;
     const p = memProducts.find(item => item.id === productId);
-    if (p && p.image) {
-      return [{ id: 0, product_id: productId, image_path: p.image, is_main: 1 }];
+    if (p && (p.image || p.image_url)) {
+      const img = p.image_url || p.image;
+      return [{ id: 0, product_id: productId, image_path: img, image_url: img, is_main: 1 }];
     }
     return [];
   },
@@ -390,9 +548,11 @@ const db = {
   async getSimilarProducts(categoryId, currentId, limit = 4) {
     if (isConnectedToPostgres && pool) {
       const res = await pool.query(`
-        SELECT * FROM products 
-        WHERE category_id = $1 AND id != $2 AND (approved = 1 OR approved IS NULL OR approved = true) AND quantity > 0
-        ORDER BY id DESC LIMIT $3
+        SELECT p.*, COALESCE(p.image_url, p.image) as image, COALESCE(p.image_url, p.image) as image_url, c.name as category_name
+        FROM products p 
+        LEFT JOIN categories c ON p.category_id = c.id
+        WHERE p.category_id = $1 AND p.id != $2 AND (p.approved = 1 OR p.approved IS NULL OR p.approved = true) AND p.quantity > 0
+        ORDER BY p.id DESC LIMIT $3
       `, [categoryId, currentId, limit]);
       return res.rows.map(r => ({ ...r, price: parseFloat(r.price) }));
     }
@@ -401,7 +561,7 @@ const db = {
       .slice(0, limit);
   },
 
-  async createProduct({ title, description, price, category_id, phone, whatsapp_number, location, payment_code, quantity, images, seller_id }) {
+  async createProduct({ title, description, price, category_id, phone, whatsapp_number, location, payment_code, quantity, images, seller_id, condition = 'Brand New' }) {
     const mainImage = (images && images.length > 0) ? images[0] : 'phone-front.svg';
     const wa = sanitizeWhatsAppNumber(whatsapp_number || phone);
     const parsedPrice = isNaN(parseFloat(price)) ? 0 : parseFloat(price);
@@ -436,18 +596,18 @@ const db = {
       }
 
       const res = await pool.query(`
-        INSERT INTO products (title, description, price, category_id, phone, whatsapp_number, location, image, payment_code, quantity, approved, seller_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1, $11)
+        INSERT INTO products (title, description, price, category_id, phone, seller_phone, whatsapp_number, location, condition, image, image_url, payment_code, quantity, approved, seller_id)
+        VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $9, $10, $11, 1, $12)
         RETURNING id
-      `, [title, description, parsedPrice, parsedCatId, phone, wa, location, mainImage, payment_code, parsedQty, validSellerId]);
+      `, [title, description, parsedPrice, parsedCatId, phone, wa, location || 'Kampala, Uganda', condition, mainImage, payment_code, parsedQty, validSellerId]);
       
       const newProdId = res.rows[0].id;
       if (images && images.length > 0) {
         for (let i = 0; i < images.length; i++) {
           await pool.query(`
-            INSERT INTO product_images (product_id, image_path, is_main)
-            VALUES ($1, $2, $3)
-          `, [newProdId, images[i], i === 0 ? 1 : 0]);
+            INSERT INTO product_images (product_id, image_path, image_url, is_main)
+            VALUES ($1, $2, $2, $3)
+          `, [newProdId, images[i], i === 0]);
         }
       }
       return newProdId;
@@ -461,10 +621,13 @@ const db = {
       price: parsedPrice,
       category_id: parsedCatId,
       phone,
+      seller_phone: phone,
       whatsapp_number: wa,
       has_whatsapp: !!wa,
-      location,
+      location: location || 'Kampala, Uganda',
+      condition,
       image: mainImage,
+      image_url: mainImage,
       payment_code,
       quantity: parsedQty,
       approved: 1,
@@ -478,6 +641,7 @@ const db = {
           id: memNextImgId++,
           product_id: newProdId,
           image_path: file,
+          image_url: file,
           is_main: index === 0 ? 1 : 0
         });
       });
@@ -539,29 +703,51 @@ const db = {
     const queryStr = (emailOrUsername || '').trim().toLowerCase();
     if (isConnectedToPostgres && pool) {
       const res = await pool.query('SELECT * FROM users WHERE LOWER(email) = $1', [queryStr]);
-      return res.rows[0] || null;
+      if (res.rows.length === 0) return null;
+      const u = res.rows[0];
+      return {
+        ...u,
+        is_admin: (u.is_admin === 1 || u.role === 'admin' || u.email.toLowerCase() === ADMIN_USERNAME.toLowerCase()) ? 1 : 0
+      };
     }
-    return memUsers.find(u => u.email.toLowerCase() === queryStr) || null;
+    const u = memUsers.find(usr => usr.email.toLowerCase() === queryStr);
+    if (!u) return null;
+    return {
+      ...u,
+      is_admin: (u.is_admin === 1 || u.role === 'admin' || u.email.toLowerCase() === ADMIN_USERNAME.toLowerCase()) ? 1 : 0
+    };
   },
 
   async findUserById(id) {
     if (isConnectedToPostgres && pool) {
       const res = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
-      return res.rows[0] || null;
+      if (res.rows.length === 0) return null;
+      const u = res.rows[0];
+      return {
+        ...u,
+        is_admin: (u.is_admin === 1 || u.role === 'admin' || u.email.toLowerCase() === ADMIN_USERNAME.toLowerCase()) ? 1 : 0
+      };
     }
-    return memUsers.find(u => u.id === id) || null;
+    const u = memUsers.find(usr => usr.id === id);
+    if (!u) return null;
+    return {
+      ...u,
+      is_admin: (u.is_admin === 1 || u.role === 'admin' || u.email.toLowerCase() === ADMIN_USERNAME.toLowerCase()) ? 1 : 0
+    };
   },
 
   async createUser(name, email, passwordHash, isAdmin = 0, phone = '', whatsappNumber = '') {
     const wa = sanitizeWhatsAppNumber(whatsappNumber || phone);
     const hasWa = !!wa;
+    const roleStr = isAdmin ? 'admin' : 'customer';
 
     if (isConnectedToPostgres && pool) {
       const res = await pool.query(
-        'INSERT INTO users (name, email, password_hash, is_admin, phone, whatsapp_number, has_whatsapp) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-        [name, email.toLowerCase(), passwordHash, isAdmin, phone, wa, hasWa]
+        'INSERT INTO users (name, email, password_hash, role, is_admin, phone, whatsapp_number, has_whatsapp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+        [name, email.toLowerCase(), passwordHash, roleStr, isAdmin, phone, wa, hasWa]
       );
       const user = res.rows[0];
+      user.is_admin = isAdmin;
       // Create initial welcome & 10-sentence anti-deception policy notification
       await this.createNotification({
         userId: user.id,
@@ -577,6 +763,7 @@ const db = {
       name,
       email: email.toLowerCase(),
       password_hash: passwordHash,
+      role: roleStr,
       is_admin: isAdmin,
       phone,
       whatsapp_number: wa,
@@ -594,6 +781,71 @@ const db = {
     });
 
     return newUser;
+  },
+
+  async syncDatabase() {
+    await initDatabase();
+    if (!isConnectedToPostgres || !pool) {
+      return {
+        success: false,
+        isConnected: false,
+        message: 'Supabase PostgreSQL connection is inactive or DATABASE_URL is not set in environment settings.'
+      };
+    }
+
+    try {
+      const client = await pool.connect();
+      try {
+        // Sync any in-memory products into PostgreSQL if any exist
+        for (const p of memProducts) {
+          const checkRes = await client.query('SELECT id FROM products WHERE title = $1', [p.title]);
+          if (checkRes.rows.length === 0) {
+            const insRes = await client.query(`
+              INSERT INTO products (title, description, price, category_id, phone, seller_phone, whatsapp_number, location, condition, image, image_url, payment_code, quantity, approved)
+              VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $9, $10, $11, 1)
+              RETURNING id
+            `, [p.title, p.description, p.price, p.category_id, p.phone, p.whatsapp_number, p.location || 'Kampala, Uganda', p.condition || 'Brand New', p.image, p.payment_code, p.quantity || 1]);
+            
+            const newId = insRes.rows[0].id;
+            const prodImgs = memProductImages.filter(img => img.product_id === p.id);
+            for (let i = 0; i < prodImgs.length; i++) {
+              await client.query(`
+                INSERT INTO product_images (product_id, image_path, image_url, is_main)
+                VALUES ($1, $2, $2, $3)
+              `, [newId, prodImgs[i].image_path || prodImgs[i].image_url, i === 0]);
+            }
+          }
+        }
+
+        const [prodCount, imgCount, userCount, orderCount, catCount] = await Promise.all([
+          client.query('SELECT COUNT(*) FROM products'),
+          client.query('SELECT COUNT(*) FROM product_images'),
+          client.query('SELECT COUNT(*) FROM users'),
+          client.query('SELECT COUNT(*) FROM orders'),
+          client.query('SELECT COUNT(*) FROM categories')
+        ]);
+
+        return {
+          success: true,
+          isConnected: true,
+          counts: {
+            products: parseInt(prodCount.rows[0].count, 10),
+            product_images: parseInt(imgCount.rows[0].count, 10),
+            users: parseInt(userCount.rows[0].count, 10),
+            orders: parseInt(orderCount.rows[0].count, 10),
+            categories: parseInt(catCount.rows[0].count, 10)
+          }
+        };
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      return {
+        success: false,
+        isConnected: false,
+        error: err.message
+      };
+    }
   },
 
   // Notification Methods
