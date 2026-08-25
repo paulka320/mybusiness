@@ -881,16 +881,21 @@ app.post(['/login.php', '/login'], async (req, res) => {
 
 // Register (with WhatsApp prompt & Fallback)
 app.get(['/register.php', '/register'], (req, res) => {
-  if (req.session && req.session.user_id) {
-    return res.redirect('index.php');
+  try {
+    if (req.session && req.session.user_id) {
+      return res.redirect('index.php');
+    }
+    res.render('register', {
+      errors: [],
+      name: '',
+      email: '',
+      phone: '',
+      whatsapp_number: ''
+    });
+  } catch (err) {
+    console.error('Error loading register view:', err);
+    res.status(500).send('Unable to load registration page.');
   }
-  res.render('register', {
-    errors: [],
-    name: '',
-    email: '',
-    phone: '',
-    whatsapp_number: ''
-  });
 });
 
 app.post(['/register.php', '/register'], async (req, res) => {
@@ -915,38 +920,54 @@ app.post(['/register.php', '/register'], async (req, res) => {
     errors.push('Password should be at least 6 characters.');
   }
 
-  if (errors.length === 0) {
-    const existing = await db.findUserByEmailOrUsername(email);
-    if (existing) {
-      errors.push('This email is already registered.');
+  try {
+    if (errors.length === 0) {
+      const existing = await db.findUserByEmailOrUsername(email);
+      if (existing) {
+        errors.push('This email address is already registered. Please sign in instead.');
+      }
     }
-  }
 
-  if (errors.length > 0) {
-    return res.render('register', {
-      errors,
+    if (errors.length > 0) {
+      return res.render('register', {
+        errors,
+        name,
+        email,
+        phone,
+        whatsapp_number: whatsappNumber
+      });
+    }
+
+    const hash = bcrypt.hashSync(password, 10);
+    const newUser = await db.createUser(name, email, hash, 0, phone, whatsappNumber);
+
+    if (!newUser || !newUser.id) {
+      throw new Error('User record could not be initialized.');
+    }
+
+    setAuthSession(req, res, {
+      id: newUser.id,
+      name: name,
+      email: email,
+      is_admin: 0
+    });
+
+    req.session.justRegistered = true;
+
+    req.session.save((saveErr) => {
+      if (saveErr) console.error('Session save warning:', saveErr);
+      res.redirect('index.php');
+    });
+  } catch (err) {
+    console.error('Error during user registration:', err);
+    res.render('register', {
+      errors: ['Registration could not be completed: ' + (err.message || 'Please try again with valid details.')],
       name,
       email,
       phone,
       whatsapp_number: whatsappNumber
     });
   }
-
-  const hash = bcrypt.hashSync(password, 10);
-  const newUser = await db.createUser(name, email, hash, 0, phone, whatsappNumber);
-
-  setAuthSession(req, res, {
-    id: newUser.id,
-    name: name,
-    email: email,
-    is_admin: 0
-  });
-
-  req.session.justRegistered = true;
-
-  req.session.save(() => {
-    res.redirect('index.php');
-  });
 });
 
 // Admin Auth: Login
@@ -1049,34 +1070,43 @@ app.post(['/admin_register.php', '/admin_register'], async (req, res) => {
     errors.push('Invalid admin code.');
   }
 
-  if (errors.length === 0) {
-    const existing = await db.findUserByEmailOrUsername(email);
-    if (existing) {
-      errors.push('This email is already registered.');
+  try {
+    if (errors.length === 0) {
+      const existing = await db.findUserByEmailOrUsername(email);
+      if (existing) {
+        errors.push('This email is already registered.');
+      }
     }
-  }
 
-  if (errors.length > 0) {
-    return res.render('admin_register', {
-      errors,
+    if (errors.length > 0) {
+      return res.render('admin_register', {
+        errors,
+        name,
+        email
+      });
+    }
+
+    const hash = bcrypt.hashSync(password, 10);
+    const newAdmin = await db.createUser(name, email, hash, 1);
+
+    setAuthSession(req, res, {
+      id: newAdmin.id,
+      name: name,
+      email: email,
+      is_admin: 1
+    });
+
+    req.session.save(() => {
+      res.redirect('admin_dashboard.php');
+    });
+  } catch (err) {
+    console.error('Error during admin registration:', err);
+    res.render('admin_register', {
+      errors: ['Admin registration failed: ' + (err.message || 'Please try again.')],
       name,
       email
     });
   }
-
-  const hash = bcrypt.hashSync(password, 10);
-  const newAdmin = await db.createUser(name, email, hash, 1);
-
-  setAuthSession(req, res, {
-    id: newAdmin.id,
-    name: name,
-    email: email,
-    is_admin: 1
-  });
-
-  req.session.save(() => {
-    res.redirect('admin_dashboard.php');
-  });
 });
 
 // ----------------------------------------------------

@@ -4,6 +4,9 @@ const bcrypt = require('bcryptjs');
 const ADMIN_USERNAME = 'EasyMarket@admin123easymarket';
 const ADMIN_PASSWORD = '@@!!easymarketadmin!@';
 
+const REGISTRATION_INTEGRITY_MESSAGE = 
+  'Welcome to EasyMarket Uganda! As a member of our commerce community, you agree to uphold our 10-Point Marketplace Authenticity and Anti-Deception Policy: (1) Maintain honest and dependable communication. (2) Zero tolerance for counterfeit, false, or exaggerated claims. (3) 5-Angle photography must show real, current condition. (4) Keep stock quantities accurate. (5) Honor all pricing and payments. Violations will result in immediate suspension and blacklisting.';
+
 // Database connection string support (Supabase, Neon, PostgreSQL, Railway, etc.)
 let rawConnectionString = (process.env.DATABASE_URL || 
                            process.env.POSTGRES_URL || 
