@@ -1532,6 +1532,20 @@ app.post(['/admin_dashboard.php/delete-sold-products', '/admin_dashboard/delete-
   });
 });
 
+// Admin: Clear All Products (Clean Catalog)
+app.post(['/admin_dashboard.php/clear-all-products', '/admin_dashboard/clear-all-products', '/admin/clear-all-products'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  await db.clearAllProducts();
+  req.session.adminFeedback = 'All test products have been permanently deleted. Catalog is completely clean.';
+
+  req.session.save(() => {
+    res.redirect('/admin_dashboard?tab=inventory&filter=all');
+  });
+});
+
 // Admin: Reply to Support Ticket
 app.post(['/admin_dashboard.php/reply-ticket', '/admin_dashboard/reply-ticket', '/admin_dashboard.php/admin_dashboard.php/reply-ticket'], async (req, res) => {
   if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {

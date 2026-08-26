@@ -32,62 +32,62 @@
         %>
 
         <nav class="main-nav" id="site-main-nav">
-            <a href="index.php" id="nav-home" class="<%= isHome ? 'active' : '' %>">
+            <a href="/index.php" id="nav-home" class="<%= isHome ? 'active' : '' %>">
                 <span>🏠 Home</span>
             </a>
-            <a href="upload.php" id="nav-sell" class="nav-sell-btn <%= isUpload ? 'active' : '' %>">
+            <a href="/upload.php" id="nav-sell" class="nav-sell-btn <%= isUpload ? 'active' : '' %>">
                 <span>➕ Sell Product</span>
             </a>
-            <a href="cart.php" id="nav-cart" class="nav-cart-desktop <%= isCart ? 'active' : '' %>">
+            <a href="/cart.php" id="nav-cart" class="nav-cart-desktop <%= isCart ? 'active' : '' %>">
                 <span>🛒 Cart</span>
                 <span id="cart-count" class="nav-counter">0</span>
             </a>
             
             <% if (locals.user && locals.user.id) { %>
-                <a href="my_products.php" id="nav-my-products" class="<%= cp.includes('my_products') ? 'active' : '' %>" title="Manage your listings, prices and inventory">
+                <a href="/my_products.php" id="nav-my-products" class="<%= cp.includes('my_products') ? 'active' : '' %>" title="Manage your listings, prices and inventory">
                     <span>📋 My Listings</span>
                 </a>
 
-                <a href="messages.php" id="nav-messages" class="nav-badge-link <%= isMessages ? 'active' : '' %>" title="Direct In-App Messages">
+                <a href="/messages.php" id="nav-messages" class="nav-badge-link <%= isMessages ? 'active' : '' %>" title="Direct In-App Messages">
                     <span>💬 Messages</span>
                     <% if (locals.unreadMsgsCount > 0) { %>
                         <span class="nav-counter"><%= locals.unreadMsgsCount %></span>
                     <% } %>
                 </a>
 
-                <a href="notifications.php" id="nav-notifs" class="nav-badge-link <%= isAlerts ? 'active' : '' %>" title="Notifications & Marketplace Rules">
+                <a href="/notifications.php" id="nav-notifs" class="nav-badge-link <%= isAlerts ? 'active' : '' %>" title="Notifications & Marketplace Rules">
                     <span>🔔 Alerts</span>
                     <% if (locals.unreadNotifsCount > 0) { %>
                         <span class="nav-counter notif-dot"><%= locals.unreadNotifsCount %></span>
                     <% } %>
                 </a>
 
-                <a href="orders.php" id="nav-orders" class="<%= isOrders ? 'active' : '' %>">
+                <a href="/orders.php" id="nav-orders" class="<%= isOrders ? 'active' : '' %>">
                     <span>📦 My Orders</span>
                 </a>
-                <a href="support.php" id="nav-support" class="<%= isSupport ? 'active' : '' %>">
+                <a href="/support.php" id="nav-support" class="<%= isSupport ? 'active' : '' %>">
                     <span>🎧 Support</span>
                 </a>
 
                 <% if (locals.user.is_admin == 1) { %>
-                    <a href="admin_dashboard.php" id="nav-admin" class="nav-admin-badge <%= isAdmin ? 'active' : '' %>">⚡ Admin Suite</a>
+                    <a href="/admin_dashboard.php" id="nav-admin" class="nav-admin-badge <%= isAdmin ? 'active' : '' %>">⚡ Admin Suite</a>
                 <% } %>
 
                 <div class="nav-user-cluster">
                     <span class="nav-user-greeting">👤 <%= locals.user.name %></span>
-                    <a href="logout.php" id="nav-logout-btn" class="nav-logout-btn">🚪 Logout</a>
+                    <a href="/logout.php" id="nav-logout-btn" class="nav-logout-btn">🚪 Logout</a>
                 </div>
             <% } else { %>
-                <a href="support.php" id="nav-support" class="<%= isSupport ? 'active' : '' %>">
+                <a href="/support.php" id="nav-support" class="<%= isSupport ? 'active' : '' %>">
                     <span>🎧 Help Center</span>
                 </a>
-                <a href="login.php" id="nav-login" class="<%= isLogin ? 'active' : '' %>">
+                <a href="/login.php" id="nav-login" class="<%= isLogin ? 'active' : '' %>">
                     <span>🔑 Login</span>
                 </a>
-                <a href="register.php" id="nav-register" class="nav-register-btn <%= isRegister ? 'active' : '' %>">
+                <a href="/register.php" id="nav-register" class="nav-register-btn <%= isRegister ? 'active' : '' %>">
                     <span>✨ Register</span>
                 </a>
-                <a href="admin_login.php" id="nav-admin-login" class="nav-admin-portal <%= isAdmin ? 'active' : '' %>">⚡ Admin</a>
+                <a href="/admin_login.php" id="nav-admin-login" class="nav-admin-portal <%= isAdmin ? 'active' : '' %>">⚡ Admin</a>
             <% } %>
         </nav>
     </div>

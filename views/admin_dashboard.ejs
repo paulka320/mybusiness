@@ -346,10 +346,17 @@
                 </div>
 
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <% if (products && products.length > 0) { %>
+                        <form method="POST" action="/admin_dashboard/clear-all-products" onsubmit="return confirm('WARNING: Are you sure you want to permanently delete ALL testing/demo products from the database and start with a clean catalog?');">
+                            <button type="submit" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                🗑️ Clear All Test Products
+                            </button>
+                        </form>
+                    <% } %>
                     <% if (locals.soldCount > 0) { %>
                         <form method="POST" action="/admin_dashboard/delete-sold-products" onsubmit="return confirm('Delete ALL <%= locals.soldCount %> sold/out-of-stock products permanently?');">
                             <button type="submit" style="background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                🗑️ Delete All Sold Products (<%= locals.soldCount %>)
+                                🗑️ Delete Sold Products (<%= locals.soldCount %>)
                             </button>
                         </form>
                     <% } %>

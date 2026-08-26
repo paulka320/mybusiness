@@ -400,6 +400,47 @@ async function initDatabase() {
         "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS image_url TEXT",
         "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS is_main BOOLEAN DEFAULT FALSE",
 
+        // orders table (Ensures both user_id & buyer_id, total & total_amount, address & delivery_address exist)
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_id INT",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS buyer_id INT",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS buyer_name VARCHAR(255)",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_name VARCHAR(255)",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS phone VARCHAR(100)",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS buyer_phone VARCHAR(100)",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS address TEXT",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS total NUMERIC(15,2) DEFAULT 0",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_amount NUMERIC(15,2) DEFAULT 0",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(100)",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(100)",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Pending'",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
+
+        // order_items table
+        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS order_id INT",
+        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_id INT",
+        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS title VARCHAR(255)",
+        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS price NUMERIC(15,2) DEFAULT 0",
+        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS quantity INT DEFAULT 1",
+        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS image VARCHAR(255)",
+        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS image_url TEXT",
+
+        // notifications table
+        "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS user_id INT",
+        "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS title VARCHAR(255)",
+        "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS message TEXT",
+        "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'system'",
+        "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_read INT DEFAULT 0",
+        "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
+
+        // messages table
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_id INT",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS receiver_id INT",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS product_id INT",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS message TEXT",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read INT DEFAULT 0",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
+
         // support_tickets table
         "ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS user_name VARCHAR(255)",
         "ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS user_email VARCHAR(255)",
@@ -448,100 +489,6 @@ async function initDatabase() {
             VALUES ($1, $2, $3, 'admin')
           `, ['EasyMarket Admin', ADMIN_USERNAME.toLowerCase(), adminPasswordHash]);
         }
-      }
-
-      // 5. Seed sample marketplace products if database is empty so Supabase immediately has data
-      const prodCountRes = await client.query('SELECT COUNT(*) FROM products');
-      if (parseInt(prodCountRes.rows[0].count, 10) === 0) {
-        const seedProducts = [
-          {
-            title: 'Apple iPhone 15 Pro Max 256GB Natural Titanium',
-            description: 'Brand new factory sealed authentic Apple iPhone 15 Pro Max with warranty. Includes USB-C cable and full box.',
-            price: 4850000,
-            category_id: 1,
-            phone: '+256 763 480495',
-            whatsapp_number: '256763480495',
-            location: 'Kampala Central, Uganda',
-            payment_code: 'AIRTEL-789012',
-            quantity: 8,
-            condition: 'Brand New (Sealed)',
-            image: 'phone-front.svg',
-            images: ['phone-front.svg', 'phone-back.svg', 'phone-left.svg', 'phone-right.svg', 'phone-top.svg']
-          },
-          {
-            title: 'Samsung Galaxy S24 Ultra 512GB Titanium Gray',
-            description: 'Official Samsung Galaxy S24 Ultra with Galaxy AI, S-Pen stylus, and 200MP Quad Telephoto camera.',
-            price: 4600000,
-            category_id: 1,
-            phone: '+256 701 456789',
-            whatsapp_number: '256701456789',
-            location: 'Garden City, Kampala',
-            payment_code: 'MTN-345678',
-            quantity: 5,
-            condition: 'Brand New (Sealed)',
-            image: 'phone-front.svg',
-            images: ['phone-front.svg', 'phone-back.svg', 'phone-left.svg']
-          },
-          {
-            title: 'Sony WH-1000XM5 Wireless Noise Canceling Headphones',
-            description: 'Industry-leading noise canceling headphones with dual processors and 8 microphones for exceptional call and music quality.',
-            price: 1350000,
-            category_id: 1,
-            phone: '+256 752 987654',
-            whatsapp_number: '256752987654',
-            location: 'Acacia Mall, Kisementi, Kampala',
-            payment_code: 'AIRTEL-556677',
-            quantity: 12,
-            condition: 'Brand New',
-            image: 'phone-front.svg',
-            images: ['phone-front.svg', 'phone-back.svg']
-          },
-          {
-            title: 'Nike Air Max 270 React Premium Sneakers',
-            description: 'Original Nike Air Max sneakers, lightweight foam midsole and all-day maximum impact cushioning.',
-            price: 320000,
-            category_id: 2,
-            phone: '+256 788 123456',
-            whatsapp_number: '256788123456',
-            location: 'Pioneer Mall, Kampala',
-            payment_code: 'MTN-889900',
-            quantity: 15,
-            condition: 'Brand New with Box',
-            image: 'phone-front.svg',
-            images: ['phone-front.svg', 'phone-back.svg', 'phone-left.svg', 'phone-right.svg']
-          },
-          {
-            title: 'Dell XPS 15 9530 Core i9 32GB RAM 1TB SSD RTX 4070',
-            description: 'High performance Dell XPS creator laptop with 3.5K OLED touch display, NVIDIA GeForce RTX graphics, and long battery life.',
-            price: 6800000,
-            category_id: 1,
-            phone: '+256 763 480495',
-            whatsapp_number: '256763480495',
-            location: 'Lugogo Bypass, Kampala',
-            payment_code: 'AIRTEL-998811',
-            quantity: 4,
-            condition: 'Brand New',
-            image: 'phone-front.svg',
-            images: ['phone-front.svg', 'phone-back.svg', 'phone-left.svg']
-          }
-        ];
-
-        for (const prod of seedProducts) {
-          const res = await client.query(`
-            INSERT INTO products (title, description, price, category_id, phone, seller_phone, whatsapp_number, location, condition, image, image_url, payment_code, quantity, approved)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1)
-            RETURNING id
-          `, [prod.title, prod.description, prod.price, prod.category_id, prod.phone, prod.phone, prod.whatsapp_number, prod.location, prod.condition, prod.image, prod.image, prod.payment_code, prod.quantity]);
-          
-          const newId = res.rows[0].id;
-          for (let i = 0; i < prod.images.length; i++) {
-            await client.query(`
-              INSERT INTO product_images (product_id, image_path, image_url, is_main)
-              VALUES ($1, $2, $3, $4)
-            `, [newId, prod.images[i], prod.images[i], i === 0]);
-          }
-        }
-        console.log(`✅ Seeded ${seedProducts.length} verified products into Supabase tables.`);
       }
 
       isConnectedToPostgres = true;
@@ -624,6 +571,10 @@ const db = {
       list = list.filter(filterFn);
     }
     return list;
+  },
+
+  async getAllProducts() {
+    return this.getProducts();
   },
 
   async getProductById(id) {
@@ -1553,10 +1504,14 @@ const db = {
   // Notification Methods
   async createNotification({ userId, title, message, type = 'system' }) {
     if (isConnectedToPostgres && pool) {
-      await pool.query(
-        'INSERT INTO notifications (user_id, title, message, type, is_read) VALUES ($1, $2, $3, $4, 0)',
-        [userId, title, message, type]
-      );
+      try {
+        await pool.query(
+          'INSERT INTO notifications (user_id, title, message, type, is_read) VALUES ($1, $2, $3, $4, FALSE)',
+          [userId, title, message, type]
+        );
+      } catch (err) {
+        console.warn('Could not insert notification into Postgres:', err.message);
+      }
       return;
     }
     memNotifications.unshift({
@@ -1580,7 +1535,7 @@ const db = {
 
   async markNotificationAsRead(notificationId, userId) {
     if (isConnectedToPostgres && pool) {
-      await pool.query('UPDATE notifications SET is_read = 1 WHERE id = $1 AND user_id = $2', [notificationId, userId]);
+      await pool.query('UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2', [notificationId, userId]);
       return;
     }
     const notif = memNotifications.find(n => n.id === notificationId && n.user_id === userId);
@@ -1591,7 +1546,7 @@ const db = {
   async sendMessage({ senderId, receiverId, productId, message }) {
     if (isConnectedToPostgres && pool) {
       const res = await pool.query(
-        'INSERT INTO messages (sender_id, receiver_id, product_id, message, is_read) VALUES ($1, $2, $3, $4, 0) RETURNING *',
+        'INSERT INTO messages (sender_id, receiver_id, product_id, message, is_read) VALUES ($1, $2, $3, $4, FALSE) RETURNING *',
         [senderId, receiverId, productId || null, message]
       );
       // Notify receiver
@@ -1908,19 +1863,35 @@ const db = {
 
   // Orders and Fulfillment
   async createOrder({ userId, total, address, phone, paymentReference, items }) {
+    const numericTotal = parseFloat(total) || 0;
+    const user = await this.findUserById(userId);
+    const userName = user ? user.name : 'Customer';
+
     if (isConnectedToPostgres && pool) {
       const orderRes = await pool.query(`
-        INSERT INTO orders (user_id, total, status, address, phone, payment_reference)
-        VALUES ($1, $2, 'Pending', $3, $4, $5)
+        INSERT INTO orders (
+          user_id, buyer_id, buyer_name, user_name,
+          phone, buyer_phone, address, delivery_address,
+          total, total_amount, payment_reference, payment_method, status
+        )
+        VALUES (
+          $1::INT, $2::INT, $3::VARCHAR, $4::VARCHAR,
+          $5::VARCHAR, $6::VARCHAR, $7::TEXT, $8::TEXT,
+          $9::NUMERIC, $10::NUMERIC, $11::VARCHAR, 'Mobile Money', 'Pending'
+        )
         RETURNING id
-      `, [userId, total, address, phone, paymentReference]);
+      `, [
+        userId, userId, userName, userName,
+        phone || '', phone || '', address || '', address || '',
+        numericTotal, numericTotal, paymentReference || ''
+      ]);
 
       const orderId = orderRes.rows[0].id;
       for (const item of items) {
         await pool.query(`
-          INSERT INTO order_items (order_id, product_id, title, price, quantity, image)
-          VALUES ($1, $2, $3, $4, $5, $6)
-        `, [orderId, item.product_id, item.title, item.price, item.quantity, item.image]);
+          INSERT INTO order_items (order_id, product_id, title, price, quantity, image, image_url)
+          VALUES ($1::INT, $2::INT, $3::VARCHAR, $4::NUMERIC, $5::INT, $6::VARCHAR, $7::TEXT)
+        `, [orderId, item.product_id, item.title, item.price, item.quantity, item.image || '', item.image || '']);
 
         // Decrement stock
         await pool.query(`
@@ -1934,7 +1905,7 @@ const db = {
       await this.createNotification({
         userId,
         title: `📦 Order #${orderId} Placed Successfully`,
-        message: `Your order of UGX ${Number(total).toLocaleString()} has been received and is queued for fulfillment.`,
+        message: `Your order of UGX ${Number(numericTotal).toLocaleString()} has been received and is queued for fulfillment.`,
         type: 'order_status'
       });
 
@@ -1965,7 +1936,7 @@ const db = {
     memOrders.unshift({
       id: orderId,
       user_id: userId,
-      total,
+      total: numericTotal,
       status: 'Pending',
       address,
       phone,
@@ -1977,7 +1948,7 @@ const db = {
     this.createNotification({
       userId,
       title: `📦 Order #${orderId} Placed Successfully`,
-      message: `Your order of UGX ${Number(total).toLocaleString()} has been received and is queued for fulfillment.`,
+      message: `Your order of UGX ${Number(numericTotal).toLocaleString()} has been received and is queued for fulfillment.`,
       type: 'order_status'
     });
 
@@ -1986,14 +1957,17 @@ const db = {
 
   async updateOrderStatus(orderId, status) {
     if (isConnectedToPostgres && pool) {
-      const res = await pool.query('UPDATE orders SET status = $1 WHERE id = $2 RETURNING user_id', [status, orderId]);
-      if (res.rows.length > 0 && res.rows[0].user_id) {
-        await this.createNotification({
-          userId: res.rows[0].user_id,
-          title: `🚚 Order #${orderId} Status: ${status}`,
-          message: `Your order status has been updated to "${status}".`,
-          type: 'order_status'
-        });
+      const res = await pool.query('UPDATE orders SET status = $1 WHERE id = $2 RETURNING user_id, buyer_id', [status, orderId]);
+      if (res.rows.length > 0) {
+        const uId = res.rows[0].user_id || res.rows[0].buyer_id;
+        if (uId) {
+          await this.createNotification({
+            userId: uId,
+            title: `🚚 Order #${orderId} Status: ${status}`,
+            message: `Your order status has been updated to "${status}".`,
+            type: 'order_status'
+          });
+        }
       }
       return;
     }
@@ -2012,19 +1986,43 @@ const db = {
 
   async getAllOrders() {
     if (isConnectedToPostgres && pool) {
-      const res = await pool.query(`
-        SELECT o.*, u.name as user_name, u.email as user_email, u.whatsapp_number
-        FROM orders o
-        LEFT JOIN users u ON o.user_id = u.id
-        ORDER BY o.created_at DESC
-      `);
-      const orders = res.rows;
-      for (const ord of orders) {
-        ord.total = parseFloat(ord.total);
-        const itRes = await pool.query('SELECT * FROM order_items WHERE order_id = $1', [ord.id]);
-        ord.items = itRes.rows.map(it => ({ ...it, price: parseFloat(it.price) }));
+      try {
+        const res = await pool.query(`
+          SELECT 
+            o.id,
+            COALESCE(o.user_id, o.buyer_id) as user_id,
+            COALESCE(o.total, o.total_amount, 0) as total,
+            COALESCE(o.status, 'Pending') as status,
+            COALESCE(o.address, o.delivery_address, '') as address,
+            COALESCE(o.phone, o.buyer_phone, '') as phone,
+            COALESCE(o.payment_reference, o.payment_method, '') as payment_reference,
+            COALESCE(u.name, o.buyer_name, 'Guest User') as user_name,
+            u.email as user_email,
+            u.whatsapp_number,
+            o.created_at
+          FROM orders o
+          LEFT JOIN users u ON COALESCE(o.user_id, o.buyer_id) = u.id
+          ORDER BY o.created_at DESC
+        `);
+        const orders = res.rows;
+        for (const ord of orders) {
+          ord.total = parseFloat(ord.total) || 0;
+          try {
+            const itRes = await pool.query('SELECT * FROM order_items WHERE order_id = $1', [ord.id]);
+            ord.items = itRes.rows.map(it => ({
+              ...it,
+              price: parseFloat(it.price) || 0,
+              image: it.image || it.image_url || 'phone-front.svg'
+            }));
+          } catch {
+            ord.items = [];
+          }
+        }
+        return orders;
+      } catch (err) {
+        console.warn('Postgres getAllOrders error:', err.message);
+        return [];
       }
-      return orders;
     }
 
     return memOrders.map(o => {
@@ -2039,23 +2037,63 @@ const db = {
   },
 
   async getOrdersByUser(userId) {
+    const uId = parseInt(userId, 10);
+    if (!uId) return [];
+
     if (isConnectedToPostgres && pool) {
-      const ordersRes = await pool.query(
-        'SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC',
-        [userId]
-      );
-      const userOrders = ordersRes.rows;
-      for (const ord of userOrders) {
-        ord.total = parseFloat(ord.total);
-        const itemsRes = await pool.query('SELECT * FROM order_items WHERE order_id = $1', [ord.id]);
-        ord.items = itemsRes.rows.map(it => ({ ...it, price: parseFloat(it.price) }));
+      try {
+        const ordersRes = await pool.query(`
+          SELECT 
+            o.id,
+            COALESCE(o.user_id, o.buyer_id) as user_id,
+            COALESCE(o.total, o.total_amount, 0) as total,
+            COALESCE(o.status, 'Pending') as status,
+            COALESCE(o.address, o.delivery_address, '') as address,
+            COALESCE(o.phone, o.buyer_phone, '') as phone,
+            COALESCE(o.payment_reference, o.payment_method, '') as payment_reference,
+            o.created_at
+          FROM orders o
+          WHERE o.user_id = $1 OR o.buyer_id = $1
+          ORDER BY o.created_at DESC
+        `, [uId]);
+        const userOrders = ordersRes.rows;
+        for (const ord of userOrders) {
+          ord.total = parseFloat(ord.total) || 0;
+          try {
+            const itemsRes = await pool.query('SELECT * FROM order_items WHERE order_id = $1', [ord.id]);
+            ord.items = itemsRes.rows.map(it => ({
+              ...it,
+              price: parseFloat(it.price) || 0,
+              image: it.image || it.image_url || 'phone-front.svg'
+            }));
+          } catch {
+            ord.items = [];
+          }
+        }
+        return userOrders;
+      } catch (err) {
+        console.warn('Postgres getOrdersByUser error:', err.message);
+        return [];
       }
-      return userOrders;
     }
 
     return memOrders
-      .filter(o => o.user_id === userId)
+      .filter(o => o.user_id === uId)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  },
+
+  // Clear all products (for testing reset or user purge)
+  async clearAllProducts() {
+    if (isConnectedToPostgres && pool) {
+      try { await pool.query('DELETE FROM price_change_requests'); } catch {}
+      try { await pool.query('DELETE FROM order_items'); } catch {}
+      try { await pool.query('DELETE FROM product_images'); } catch {}
+      try { await pool.query('DELETE FROM products'); } catch {}
+    }
+    memProducts = [];
+    memProductImages = [];
+    memPriceChangeRequests = [];
+    return true;
   },
 
   // Support Tickets
