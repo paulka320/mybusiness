@@ -1163,49 +1163,26 @@
             <!-- FORM 1: Connect / Update Supabase Credentials -->
             <div style="background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
                 <h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 0 0 6px 0; display: flex; align-items: center; gap: 8px;">
-                    🔑 Update Supabase Database Credentials
+                    🔑 Connect via Supabase Pooler URI
                 </h3>
                 <p style="font-size: 13px; color: #64748b; margin: 0 0 16px 0;">
-                    Enter your Supabase database password or complete connection URI to link this store directly to Supabase.
+                    Paste the <strong>Transaction Pooler URI</strong> (from the green <strong>"Connect"</strong> button in your Supabase dashboard) to link this store directly to Supabase.
                 </p>
 
                 <form method="POST" action="/admin_dashboard/connect-database" style="display: flex; flex-direction: column; gap: 14px;">
                     <div>
                         <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 6px;">
-                            Quick Connect: Supabase Database Password
-                        </label>
-                        <input 
-                            type="password" 
-                            name="db_password" 
-                            placeholder="Enter your Supabase database password..." 
-                            style="width: 100%; padding: 10px 14px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 13px; box-sizing: border-box;"
-                        >
-                        <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
-                            Auto-connects to <code>db.ijizfozhorgaidgjonws.supabase.co:5432/postgres</code>
-                        </div>
-                    </div>
-
-                    <div style="display: flex; align-items: center; gap: 10px; margin: 4px 0;">
-                        <input type="checkbox" id="use_pooler" name="use_pooler" value="1" style="width: 16px; height: 16px; cursor: pointer;">
-                        <label for="use_pooler" style="font-size: 12px; font-weight: 600; color: #475569; cursor: pointer;">
-                            Use Supabase Connection Pooler (Port 6543 / Session Mode)
-                        </label>
-                    </div>
-
-                    <div style="text-align: center; font-size: 11px; font-weight: 700; color: #94a3b8; margin: 2px 0;">
-                        — OR PASTE FULL CONNECTION STRING —
-                    </div>
-
-                    <div>
-                        <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 6px;">
-                            Full PostgreSQL Connection URI
+                            Supabase Pooler Connection URI (Recommended)
                         </label>
                         <input 
                             type="text" 
                             name="connection_string" 
-                            placeholder="postgresql://postgres:[PASSWORD]@db.ijizfozhorgaidgjonws.supabase.co:5432/postgres" 
+                            placeholder="postgresql://postgres.ijizfozhorgaidgjonws:1234ZXCmqwERT@aws-0-eu-central-1.pooler.supabase.com:6543/postgres" 
                             style="width: 100%; padding: 10px 14px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 13px; box-sizing: border-box;"
                         >
+                        <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
+                            💡 Obtain this by clicking the green <strong>Connect</strong> button at the top header in Supabase & selecting <strong>Transaction pooler</strong>.
+                        </div>
                     </div>
 
                     <button type="submit" class="btn-primary" style="padding: 12px 20px; font-size: 14px; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 6px;">
@@ -1217,28 +1194,28 @@
             <!-- STEP-BY-STEP SUPABASE QUICK GUIDE -->
             <div style="background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
                 <h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
-                    📖 How to Verify in Supabase Dashboard
+                    📖 How to Get the Correct Pooler URI from Supabase
                 </h3>
 
                 <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px; color: #334155; line-height: 1.5;">
                     <div style="display: flex; gap: 10px; align-items: flex-start;">
-                        <span style="background: #eff6ff; color: #2563eb; font-weight: 800; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">1</span>
+                        <span style="background: #22c55e; color: white; font-weight: 800; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">1</span>
                         <div>
-                            <strong>Open Supabase Project:</strong> Go to <a href="https://supabase.com/dashboard" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: none;">supabase.com/dashboard</a> and open project <strong>ijizfozhorgaidgjonws</strong>.
+                            <strong>Click the Green "Connect" Button:</strong> In your Supabase project dashboard (at the top-right header), click the green button labeled <strong>"Connect"</strong>.
                         </div>
                     </div>
 
                     <div style="display: flex; gap: 10px; align-items: flex-start;">
-                        <span style="background: #eff6ff; color: #2563eb; font-weight: 800; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">2</span>
+                        <span style="background: #22c55e; color: white; font-weight: 800; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">2</span>
                         <div>
-                            <strong>Check Password:</strong> Click <strong>Project Settings (gear icon) → Database</strong>. Under <em>Database password</em>, click <strong>Reset database password</strong> if you need a fresh password.
+                            <strong>Select "Transaction pooler" / "URI":</strong> Under <em>Connection Method</em>, click <strong>Transaction pooler</strong> (Port <code>6543</code>) or <strong>Session pooler</strong> (Port <code>5432</code>).
                         </div>
                     </div>
 
                     <div style="display: flex; gap: 10px; align-items: flex-start;">
-                        <span style="background: #eff6ff; color: #2563eb; font-weight: 800; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">3</span>
+                        <span style="background: #22c55e; color: white; font-weight: 800; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">3</span>
                         <div>
-                            <strong>Inspect Uploaded Products in Table Editor:</strong> Click <strong>Table Editor</strong> in the left sidebar → Select the <code>products</code> or <code>product_images</code> table to view all live records in Supabase!
+                            <strong>Copy & Replace [YOUR-PASSWORD]:</strong> Copy the connection string, replace <code>[YOUR-PASSWORD]</code> with <code>1234ZXCmqwERT</code>, paste it in the form on the left, and click <strong>"Connect & Sync to Supabase Now"</strong>!
                         </div>
                     </div>
                 </div>

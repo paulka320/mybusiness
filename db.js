@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const { createClient } = require('@supabase/supabase-js');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
@@ -12,30 +13,33 @@ const REGISTRATION_INTEGRITY_MESSAGE =
 // Persistent configuration storage for Supabase/PostgreSQL settings
 const CONFIG_FILE_PATH = path.join(__dirname, '.supabase_config.json');
 
-function loadSavedConnectionString() {
+function loadSavedDbConfig() {
   try {
     if (fs.existsSync(CONFIG_FILE_PATH)) {
       const data = JSON.parse(fs.readFileSync(CONFIG_FILE_PATH, 'utf8'));
-      if (data && data.connectionString && typeof data.connectionString === 'string' && data.connectionString.trim()) {
-        return data.connectionString.trim();
+      if (data && typeof data === 'object') {
+        return data;
       }
     }
   } catch (e) {
     console.warn('Could not read saved database config:', e.message);
   }
-  return (process.env.DATABASE_URL || 
-          process.env.POSTGRES_URL || 
-          process.env.SUPABASE_DB_URL || 
-          process.env.PG_CONNECTION_STRING || '').trim();
+  return {
+    connectionString: (process.env.DATABASE_URL || 
+                       process.env.POSTGRES_URL || 
+                       process.env.SUPABASE_DB_URL || 
+                       process.env.PG_CONNECTION_STRING || '').trim(),
+    supabaseUrl: (process.env.SUPABASE_URL || 'https://ijizfozhorgaidgjonws.supabase.co').trim(),
+    supabaseKey: (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || '').trim()
+  };
 }
 
-function saveConnectionStringToDisk(connStr) {
+function saveDbConfigToDisk(cfg) {
   try {
-    if (connStr && typeof connStr === 'string' && connStr.trim()) {
-      fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify({
-        connectionString: connStr.trim(),
-        savedAt: new Date().toISOString()
-      }, null, 2), 'utf8');
+    if (cfg && typeof cfg === 'object') {
+      const existing = loadSavedDbConfig();
+      const merged = { ...existing, ...cfg, savedAt: new Date().toISOString() };
+      fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(merged, null, 2), 'utf8');
       return true;
     }
   } catch (e) {
@@ -44,9 +48,15 @@ function saveConnectionStringToDisk(connStr) {
   return false;
 }
 
-let rawConnectionString = loadSavedConnectionString();
+const initialSavedConfig = loadSavedDbConfig();
+let rawConnectionString = initialSavedConfig.connectionString || '';
+let supabaseClientUrl = initialSavedConfig.supabaseUrl || 'https://ijizfozhorgaidgjonws.supabase.co';
+let supabaseClientKey = initialSavedConfig.supabaseKey || '';
+let supabaseJsClient = null;
+
 let pool = null;
 let isConnectedToPostgres = false;
+let isConnectedToSupabaseJs = false;
 let lastDbError = null;
 let lastDbErrorCode = null;
 let lastDbSuccessTime = null;
@@ -1522,7 +1532,9 @@ const db = {
       lastDbErrorCode = err.code || null;
       
       let helpfulAdvice = '';
-      if (err.code === '28P01' || (err.message && err.message.includes('password authentication failed'))) {
+      if (err.code === 'ECONNREFUSED' || (err.message && err.message.includes('ECONNREFUSED'))) {
+        helpfulAdvice = 'Direct Supabase host (db.ijizfozhorgaidgjonws.supabase.co) only supports IPv6. To connect from cloud servers, use the Supabase Connection Pooler: In your Supabase Dashboard, click the green "Connect" button at the top header, select "Transaction pooler" or "Session pooler" (e.g. aws-0-[region].pooler.supabase.com:6543) and copy the URI.';
+      } else if (err.code === '28P01' || (err.message && err.message.includes('password authentication failed'))) {
         helpfulAdvice = 'Password Authentication Failed (Code: 28P01). The database password does not match your Supabase project. Go to Supabase Dashboard -> Project Settings -> Database -> Database password, reset/set your password, and enter the new password.';
       } else if (err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT') {
         helpfulAdvice = 'Network host unreachable or timed out. Please check your Supabase project status or try using the Supabase Connection Pooler URI (Session Mode or Transaction Mode).';
