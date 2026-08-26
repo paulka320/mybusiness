@@ -1379,6 +1379,9 @@ app.get(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
   const pendingPriceRequests = priceRequests.filter(r => r.status === 'Pending');
 
   const stats = await db.getSystemStats();
+  const dbDiagnostics = await db.getSupabaseDiagnostics();
+  const supabaseRawProducts = await db.getSupabaseRawProducts(50);
+
   const activeTab = req.query.tab || 'overview';
   const filter = req.query.filter || 'all';
   const customerThreads = await db.getAllCustomerMessagesForAdmin();
@@ -1392,6 +1395,9 @@ app.get(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
 
   const syncResult = req.session.syncResult || null;
   req.session.syncResult = null;
+
+  const dbTestResult = req.session.dbTestResult || null;
+  req.session.dbTestResult = null;
 
   const adminFeedback = req.session.adminFeedback || null;
   req.session.adminFeedback = null;
@@ -1408,6 +1414,9 @@ app.get(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
     activeTab,
     customerThreads,
     syncResult,
+    dbDiagnostics,
+    supabaseRawProducts,
+    dbTestResult,
     adminFeedback
   });
 });
@@ -1557,6 +1566,49 @@ app.post(['/admin_dashboard.php/return-status', '/admin_dashboard/return-status'
   res.redirect('/admin_dashboard?tab=orders');
 });
 
+// Admin: Connect & Verify Supabase PostgreSQL Database Credentials
+app.post(['/admin_dashboard.php/connect-database', '/admin_dashboard/connect-database', '/admin/connect-database'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const connectionString = (req.body.connection_string || '').trim();
+  const dbPassword = (req.body.db_password || '').trim();
+  const projectRef = (req.body.project_ref || 'ijizfozhorgaidgjonws').trim();
+  const usePooler = req.body.use_pooler === '1' || req.body.use_pooler === 'true';
+
+  let input;
+  if (connectionString) {
+    input = connectionString;
+  } else if (dbPassword) {
+    input = {
+      password: dbPassword,
+      projectRef,
+      usePooler
+    };
+  } else {
+    req.session.dbTestResult = {
+      success: false,
+      error: 'Please provide either a database connection string or your Supabase database password.'
+    };
+    return req.session.save(() => {
+      res.redirect('/admin_dashboard?tab=database');
+    });
+  }
+
+  const result = await db.reconnectDatabase(input);
+  req.session.dbTestResult = result;
+  if (result.success) {
+    req.session.adminFeedback = '🎉 Supabase PostgreSQL Database Connected & Synchronized Successfully! Your uploaded products are now live in Supabase.';
+  } else {
+    req.session.adminFeedback = `⚠️ Connection Attempt Failed: ${result.error}`;
+  }
+
+  req.session.save(() => {
+    res.redirect('/admin_dashboard?tab=database');
+  });
+});
+
 // Admin: Force Sync Database & Validate PostgreSQL/Supabase Tables
 app.post(['/admin_dashboard.php/sync-database', '/admin_dashboard/sync-database', '/admin/sync-database'], async (req, res) => {
   if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
@@ -1566,13 +1618,24 @@ app.post(['/admin_dashboard.php/sync-database', '/admin_dashboard/sync-database'
   try {
     const result = await db.syncDatabase();
     req.session.syncResult = result;
+    if (result.success) {
+      req.session.adminFeedback = `✅ Sync Complete: ${result.counts ? result.counts.products : 0} product listings and tables verified in Supabase!`;
+    }
   } catch (err) {
     req.session.syncResult = { success: false, error: err.message };
+    req.session.adminFeedback = `⚠️ Sync Failed: ${err.message}`;
   }
 
+  const targetTab = req.query.tab || req.body.return_tab || 'database';
   req.session.save(() => {
-    res.redirect('/admin_dashboard?tab=overview&synced=1');
+    res.redirect(`/admin_dashboard?tab=${targetTab}&synced=1`);
   });
+});
+
+// JSON API endpoint for live database health checks
+app.get('/api/database/status', async (req, res) => {
+  const diag = await db.getSupabaseDiagnostics();
+  res.json(diag);
 });
 
 // Admin legacy stock/delete handler

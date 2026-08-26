@@ -71,6 +71,14 @@
         <a href="/admin_dashboard?tab=marketing" class="admin-tab-btn <%= (activeTab === 'marketing') ? 'active' : '' %>" style="text-decoration: none; padding: 10px 16px; font-weight: 600; font-size: 14px; border-radius: 8px; color: <%= (activeTab === 'marketing') ? '#2563eb' : '#64748b' %>; background: <%= (activeTab === 'marketing') ? '#eff6ff' : 'transparent' %>;">
             📢 Campaigns & Promo
         </a>
+        <a href="/admin_dashboard?tab=database" class="admin-tab-btn <%= (activeTab === 'database') ? 'active' : '' %>" style="text-decoration: none; padding: 10px 16px; font-weight: 600; font-size: 14px; border-radius: 8px; color: <%= (activeTab === 'database') ? '#2563eb' : '#64748b' %>; background: <%= (activeTab === 'database') ? '#eff6ff' : 'transparent' %>; display: flex; align-items: center; gap: 6px;">
+            ⚡ Supabase & Database
+            <% if (locals.dbDiagnostics && dbDiagnostics.isConnected) { %>
+                <span style="background: #22c55e; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px;">🟢 Connected</span>
+            <% } else { %>
+                <span style="background: #f59e0b; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px;">🟡 Action Needed</span>
+            <% } %>
+        </a>
     </div>
 
     <!-- 1. OVERVIEW & FINANCIALS TAB -->
@@ -225,11 +233,12 @@
                     </div>
 
                     <!-- Sync & Test Database Button -->
-                    <div style="margin-top: 6px; display: flex; justify-content: space-between; align-items: center; background: #f1f5f9; padding: 10px 14px; border-radius: 10px;">
-                        <div style="font-size: 12px; color: #475569;">
-                            Sync uploaded catalog & verify tables
-                        </div>
+                    <div style="margin-top: 6px; display: flex; justify-content: space-between; align-items: center; background: #f1f5f9; padding: 10px 14px; border-radius: 10px; gap: 8px; flex-wrap: wrap;">
+                        <a href="/admin_dashboard?tab=database" style="font-size: 12px; color: #2563eb; font-weight: 700; text-decoration: none;">
+                            ⚙️ Configure Supabase / View Evidence →
+                        </a>
                         <form method="POST" action="/admin_dashboard/sync-database" style="margin: 0;">
+                            <input type="hidden" name="return_tab" value="overview">
                             <button type="submit" style="background: #2563eb; color: white; border: none; padding: 7px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px;">
                                 ⚡ Sync Database Now
                             </button>
@@ -1016,6 +1025,323 @@
                 </div>
             <% } %>
         </div>
+    </section>
+    <% } else if (activeTab === 'database') { %>
+    <!-- SUPABASE & DATABASE CONNECTIVITY & LIVE EVIDENCE SUITE -->
+    <section class="admin-tab-content" id="tab-database">
+        
+        <!-- Live Connection Health & Diagnosis Banner -->
+        <div style="background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; border-bottom: 1px solid #f1f5f9; padding-bottom: 16px; margin-bottom: 20px;">
+                <div>
+                    <h2 style="font-size: 1.3rem; font-weight: 800; color: #0f172a; margin: 0 0 4px 0; display: flex; align-items: center; gap: 10px;">
+                        ⚡ Supabase PostgreSQL Database & Real-Time Evidence
+                    </h2>
+                    <p style="font-size: 13px; color: #64748b; margin: 0;">
+                        Direct cloud database connection management and live PostgreSQL catalog inspector.
+                    </p>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <% if (locals.dbDiagnostics && dbDiagnostics.isConnected) { %>
+                        <div style="background: #dcfce7; border: 1.5px solid #86efac; color: #15803d; padding: 6px 14px; border-radius: 30px; font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; gap: 8px;">
+                            <span style="width: 10px; height: 10px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 8px #22c55e;"></span>
+                            SUPABASE CONNECTED & PERSISTENT
+                        </div>
+                    <% } else { %>
+                        <div style="background: #fef3c7; border: 1.5px solid #fde68a; color: #b45309; padding: 6px 14px; border-radius: 30px; font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; gap: 8px;">
+                            <span style="width: 10px; height: 10px; background: #f59e0b; border-radius: 50%;"></span>
+                            IN-MEMORY FALLBACK (Supabase Disconnected)
+                        </div>
+                    <% } %>
+
+                    <form method="POST" action="/admin_dashboard/sync-database" style="margin: 0;">
+                        <input type="hidden" name="return_tab" value="database">
+                        <button type="submit" style="background: #2563eb; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                            🔄 Force Re-Sync Catalog
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Feedback / Result Alerts -->
+            <% if (locals.dbTestResult) { %>
+                <div style="margin-bottom: 20px; padding: 14px 18px; border-radius: 12px; font-size: 13px; <%= dbTestResult.success ? 'background: #f0fdf4; border: 1px solid #86efac; color: #166534;' : 'background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b;' %>">
+                    <div style="font-weight: 800; font-size: 14px; margin-bottom: 4px;">
+                        <%= dbTestResult.success ? '🎉 Connection Succeeded!' : '❌ Connection Error Details:' %>
+                    </div>
+                    <div><%= dbTestResult.message || dbTestResult.error %></div>
+                    <% if (dbTestResult.helpfulAdvice) { %>
+                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(0,0,0,0.15); font-weight: 600;">
+                            💡 Next Step: <%= dbTestResult.helpfulAdvice %>
+                        </div>
+                    <% } %>
+                </div>
+            <% } %>
+
+            <% if (locals.syncResult && !locals.dbTestResult) { %>
+                <div style="margin-bottom: 20px; padding: 14px 18px; border-radius: 12px; font-size: 13px; <%= syncResult.success ? 'background: #f0fdf4; border: 1px solid #86efac; color: #166534;' : 'background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b;' %>">
+                    <div style="font-weight: 800; font-size: 14px; margin-bottom: 4px;">
+                        <%= syncResult.success ? '✅ Supabase Database Sync Successful' : '⚠️ Sync Warning' %>
+                    </div>
+                    <% if (syncResult.counts) { %>
+                        <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; font-weight: 600;">
+                            <span>📦 Products in Supabase: <strong><%= syncResult.counts.products %></strong></span>
+                            <span>🖼️ Images: <strong><%= syncResult.counts.product_images %></strong></span>
+                            <span>👥 Users: <strong><%= syncResult.counts.users %></strong></span>
+                            <span>🛒 Orders: <strong><%= syncResult.counts.orders %></strong></span>
+                            <span>📂 Categories: <strong><%= syncResult.counts.categories %></strong></span>
+                        </div>
+                    <% } else { %>
+                        <div><%= syncResult.message || syncResult.error %></div>
+                    <% } %>
+                </div>
+            <% } %>
+
+            <!-- Detailed Diagnostics Metric Grid -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px;">
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;">
+                    <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Supabase Host</div>
+                    <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 4px; word-break: break-all;">
+                        <%= locals.dbDiagnostics ? dbDiagnostics.host : 'db.ijizfozhorgaidgjonws.supabase.co' %>
+                    </div>
+                </div>
+
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;">
+                    <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Project Ref</div>
+                    <div style="font-size: 14px; font-weight: 800; color: #2563eb; margin-top: 4px;">
+                        <%= locals.dbDiagnostics ? dbDiagnostics.projectRef : 'ijizfozhorgaidgjonws' %>
+                    </div>
+                </div>
+
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;">
+                    <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Cloud Products Count</div>
+                    <div style="font-size: 18px; font-weight: 900; color: #0f172a; margin-top: 2px;">
+                        <%= locals.dbDiagnostics && dbDiagnostics.counts ? dbDiagnostics.counts.products : products.length %>
+                        <span style="font-size: 12px; font-weight: 600; color: #64748b;">items</span>
+                    </div>
+                </div>
+
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;">
+                    <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Latency & Mode</div>
+                    <div style="font-size: 14px; font-weight: 700; color: <%= (locals.dbDiagnostics && dbDiagnostics.latencyMs) ? '#16a34a' : '#ea580c' %>; margin-top: 4px;">
+                        <%= (locals.dbDiagnostics && dbDiagnostics.latencyMs) ? `${dbDiagnostics.latencyMs} ms (Direct Cloud)` : 'Fallback In-Memory' %>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Last Error / Troubleshooting Alert if disconnected -->
+            <% if (locals.dbDiagnostics && !dbDiagnostics.isConnected && dbDiagnostics.lastError) { %>
+                <div style="background: #fff1f2; border: 1.5px solid #fecdd3; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                    <div style="display: flex; gap: 10px; align-items: flex-start;">
+                        <span style="font-size: 20px;">⚠️</span>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 800; color: #9f1239; font-size: 14px; margin-bottom: 4px;">
+                                Why are uploaded products not showing in Supabase yet?
+                            </div>
+                            <div style="font-size: 13px; color: #881337; line-height: 1.5;">
+                                PostgreSQL authentication failed with message: <code><%= dbDiagnostics.lastError %></code>
+                                <% if (dbDiagnostics.lastErrorCode === '28P01' || dbDiagnostics.lastError.includes('password authentication failed')) { %>
+                                    <p style="margin: 8px 0 0 0; font-weight: 600;">
+                                        👉 <strong>Cause:</strong> The database password in EasyMarket does not match your current Supabase project password.
+                                    </p>
+                                    <p style="margin: 4px 0 0 0;">
+                                        👉 <strong>Fix:</strong> Enter your Supabase database password in the form below and click <strong>"Connect & Sync to Supabase"</strong>. Once connected, all your uploaded products will instantly write to the Supabase database.
+                                    </p>
+                                <% } %>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <% } %>
+
+        </div>
+
+        <!-- 2-COLUMN SECTION: CONNECTIVITY SETTINGS & STEP-BY-STEP SUPABASE GUIDE -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 24px;">
+            
+            <!-- FORM 1: Connect / Update Supabase Credentials -->
+            <div style="background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                <h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 0 0 6px 0; display: flex; align-items: center; gap: 8px;">
+                    🔑 Update Supabase Database Credentials
+                </h3>
+                <p style="font-size: 13px; color: #64748b; margin: 0 0 16px 0;">
+                    Enter your Supabase database password or complete connection URI to link this store directly to Supabase.
+                </p>
+
+                <form method="POST" action="/admin_dashboard/connect-database" style="display: flex; flex-direction: column; gap: 14px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 6px;">
+                            Quick Connect: Supabase Database Password
+                        </label>
+                        <input 
+                            type="password" 
+                            name="db_password" 
+                            placeholder="Enter your Supabase database password..." 
+                            style="width: 100%; padding: 10px 14px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 13px; box-sizing: border-box;"
+                        >
+                        <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
+                            Auto-connects to <code>db.ijizfozhorgaidgjonws.supabase.co:5432/postgres</code>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 10px; margin: 4px 0;">
+                        <input type="checkbox" id="use_pooler" name="use_pooler" value="1" style="width: 16px; height: 16px; cursor: pointer;">
+                        <label for="use_pooler" style="font-size: 12px; font-weight: 600; color: #475569; cursor: pointer;">
+                            Use Supabase Connection Pooler (Port 6543 / Session Mode)
+                        </label>
+                    </div>
+
+                    <div style="text-align: center; font-size: 11px; font-weight: 700; color: #94a3b8; margin: 2px 0;">
+                        — OR PASTE FULL CONNECTION STRING —
+                    </div>
+
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 6px;">
+                            Full PostgreSQL Connection URI
+                        </label>
+                        <input 
+                            type="text" 
+                            name="connection_string" 
+                            placeholder="postgresql://postgres:[PASSWORD]@db.ijizfozhorgaidgjonws.supabase.co:5432/postgres" 
+                            style="width: 100%; padding: 10px 14px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 13px; box-sizing: border-box;"
+                        >
+                    </div>
+
+                    <button type="submit" class="btn-primary" style="padding: 12px 20px; font-size: 14px; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 6px;">
+                        ⚡ Connect & Sync to Supabase Now
+                    </button>
+                </form>
+            </div>
+
+            <!-- STEP-BY-STEP SUPABASE QUICK GUIDE -->
+            <div style="background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                <h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
+                    📖 How to Verify in Supabase Dashboard
+                </h3>
+
+                <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px; color: #334155; line-height: 1.5;">
+                    <div style="display: flex; gap: 10px; align-items: flex-start;">
+                        <span style="background: #eff6ff; color: #2563eb; font-weight: 800; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">1</span>
+                        <div>
+                            <strong>Open Supabase Project:</strong> Go to <a href="https://supabase.com/dashboard" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: none;">supabase.com/dashboard</a> and open project <strong>ijizfozhorgaidgjonws</strong>.
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; align-items: flex-start;">
+                        <span style="background: #eff6ff; color: #2563eb; font-weight: 800; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">2</span>
+                        <div>
+                            <strong>Check Password:</strong> Click <strong>Project Settings (gear icon) → Database</strong>. Under <em>Database password</em>, click <strong>Reset database password</strong> if you need a fresh password.
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; align-items: flex-start;">
+                        <span style="background: #eff6ff; color: #2563eb; font-weight: 800; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">3</span>
+                        <div>
+                            <strong>Inspect Uploaded Products in Table Editor:</strong> Click <strong>Table Editor</strong> in the left sidebar → Select the <code>products</code> or <code>product_images</code> table to view all live records in Supabase!
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- LIVE EVIDENCE TABLE: DIRECT POSTGRESQL / SUPABASE INSPECTOR -->
+        <div style="background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 0 0 4px 0; display: flex; align-items: center; gap: 8px;">
+                        🔍 Live Database Evidence Table (`products`)
+                    </h3>
+                    <p style="font-size: 13px; color: #64748b; margin: 0;">
+                        Live records fetched from the database store showing full product details, stock, pricing, and timestamps.
+                    </p>
+                </div>
+
+                <div style="font-size: 12px; font-weight: 700; background: #f1f5f9; color: #334155; padding: 6px 12px; border-radius: 8px;">
+                    Total Stored Records: <%= locals.supabaseRawProducts ? supabaseRawProducts.length : products.length %>
+                </div>
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;">
+                    <thead>
+                        <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #475569; font-size: 12px; text-transform: uppercase;">
+                            <th style="padding: 12px 14px;">DB ID</th>
+                            <th style="padding: 12px 14px;">Image</th>
+                            <th style="padding: 12px 14px;">Product Title</th>
+                            <th style="padding: 12px 14px;">Category</th>
+                            <th style="padding: 12px 14px;">Price (UGX)</th>
+                            <th style="padding: 12px 14px;">Stock</th>
+                            <th style="padding: 12px 14px;">Condition</th>
+                            <th style="padding: 12px 14px;">Phone / WhatsApp</th>
+                            <th style="padding: 12px 14px;">Location</th>
+                            <th style="padding: 12px 14px;">Storage Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% const displayRaw = (locals.supabaseRawProducts && supabaseRawProducts.length > 0) ? supabaseRawProducts : products; %>
+                        <% if (displayRaw.length === 0) { %>
+                            <tr>
+                                <td colspan="10" style="padding: 30px; text-align: center; color: #64748b;">
+                                    No products found in the database. Upload a product using the "Upload Product" page.
+                                </td>
+                            </tr>
+                        <% } else { %>
+                            <% displayRaw.forEach(item => { %>
+                                <tr style="border-bottom: 1px solid #f1f5f9; hover: background: #f8fafc;">
+                                    <td style="padding: 12px 14px; font-weight: 800; color: #2563eb;">
+                                        #<%= item.id %>
+                                    </td>
+                                    <td style="padding: 12px 14px;">
+                                        <img 
+                                            src="<%= (item.image && item.image.startsWith('http')) ? item.image : '/images/' + (item.image || 'phone-front.svg') %>" 
+                                            alt="<%= item.title %>" 
+                                            style="width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid #e2e8f0;"
+                                        >
+                                    </td>
+                                    <td style="padding: 12px 14px; font-weight: 700; color: #0f172a; max-width: 200px;">
+                                        <%= item.title %>
+                                    </td>
+                                    <td style="padding: 12px 14px; color: #64748b;">
+                                        <%= item.category_name || 'General' %>
+                                    </td>
+                                    <td style="padding: 12px 14px; font-weight: 800; color: #16a34a;">
+                                        UGX <%= (typeof item.price === 'number') ? item.price.toLocaleString() : parseFloat(item.price || 0).toLocaleString() %>
+                                    </td>
+                                    <td style="padding: 12px 14px;">
+                                        <span style="font-weight: 700; padding: 3px 8px; border-radius: 6px; font-size: 11px; <%= item.quantity > 0 ? 'background: #dcfce7; color: #15803d;' : 'background: #fee2e2; color: #b91c1c;' %>">
+                                            <%= item.quantity %> in stock
+                                        </span>
+                                    </td>
+                                    <td style="padding: 12px 14px; color: #475569; font-size: 12px;">
+                                        <%= item.condition || 'Brand New' %>
+                                    </td>
+                                    <td style="padding: 12px 14px; font-size: 12px; color: #0f172a;">
+                                        <%= item.phone || item.seller_phone || '—' %>
+                                    </td>
+                                    <td style="padding: 12px 14px; font-size: 12px; color: #64748b;">
+                                        <%= item.location || 'Uganda' %>
+                                    </td>
+                                    <td style="padding: 12px 14px;">
+                                        <% if (item.is_in_supabase || (locals.dbDiagnostics && dbDiagnostics.isConnected)) { %>
+                                            <span style="background: #dcfce7; color: #15803d; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px;">
+                                                🟢 Supabase Stored
+                                            </span>
+                                        <% } else { %>
+                                            <span style="background: #fef3c7; color: #b45309; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px;">
+                                                🟡 Memory Fallback
+                                            </span>
+                                        <% } %>
+                                    </td>
+                                </tr>
+                            <% }); %>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
     </section>
     <% } %>
 </main>

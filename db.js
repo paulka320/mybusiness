@@ -1,5 +1,7 @@
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
 
 const ADMIN_USERNAME = 'EasyMarket@admin123easymarket';
 const ADMIN_PASSWORD = '@@!!easymarketadmin!@';
@@ -7,64 +9,142 @@ const ADMIN_PASSWORD = '@@!!easymarketadmin!@';
 const REGISTRATION_INTEGRITY_MESSAGE = 
   'Welcome to EasyMarket Uganda! As a member of our commerce community, you agree to uphold our 10-Point Marketplace Authenticity and Anti-Deception Policy: (1) Maintain honest and dependable communication. (2) Zero tolerance for counterfeit, false, or exaggerated claims. (3) 5-Angle photography must show real, current condition. (4) Keep stock quantities accurate. (5) Honor all pricing and payments. Violations will result in immediate suspension and blacklisting.';
 
-// Database connection string support (Supabase, Neon, PostgreSQL, Railway, etc.)
-let rawConnectionString = (process.env.DATABASE_URL || 
-                           process.env.POSTGRES_URL || 
-                           process.env.SUPABASE_DB_URL || 
-                           process.env.PG_CONNECTION_STRING || '').trim();
+// Persistent configuration storage for Supabase/PostgreSQL settings
+const CONFIG_FILE_PATH = path.join(__dirname, '.supabase_config.json');
 
+function loadSavedConnectionString() {
+  try {
+    if (fs.existsSync(CONFIG_FILE_PATH)) {
+      const data = JSON.parse(fs.readFileSync(CONFIG_FILE_PATH, 'utf8'));
+      if (data && data.connectionString && typeof data.connectionString === 'string' && data.connectionString.trim()) {
+        return data.connectionString.trim();
+      }
+    }
+  } catch (e) {
+    console.warn('Could not read saved database config:', e.message);
+  }
+  return (process.env.DATABASE_URL || 
+          process.env.POSTGRES_URL || 
+          process.env.SUPABASE_DB_URL || 
+          process.env.PG_CONNECTION_STRING || '').trim();
+}
+
+function saveConnectionStringToDisk(connStr) {
+  try {
+    if (connStr && typeof connStr === 'string' && connStr.trim()) {
+      fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify({
+        connectionString: connStr.trim(),
+        savedAt: new Date().toISOString()
+      }, null, 2), 'utf8');
+      return true;
+    }
+  } catch (e) {
+    console.warn('Could not save database config to disk:', e.message);
+  }
+  return false;
+}
+
+let rawConnectionString = loadSavedConnectionString();
 let pool = null;
 let isConnectedToPostgres = false;
+let lastDbError = null;
+let lastDbErrorCode = null;
+let lastDbSuccessTime = null;
+let lastDbHost = null;
+let lastDbProjectRef = 'ijizfozhorgaidgjonws';
 
 function parsePgConfig(connStr) {
-  if (!connStr) return null;
-  
-  // Try custom regex to extract user, password, host, port, database cleanly even with @ in password
-  const match = connStr.match(/^postgres(?:ql)?:\/\/([^:]+):(.*)@([^:/]+)(?::(\d+))?\/(.*)$/);
+  if (!connStr || typeof connStr !== 'string') return null;
+  const trimmed = connStr.trim();
+  if (!trimmed) return null;
+
+  // Extract host, user, password, port, database cleanly even with complex passwords containing '@', '!', '?', '#', '%'
+  // Standard format: postgresql://[user]:[password]@[host]:[port]/[database]
+  const regex = /^postgres(?:ql)?:\/\/([^:]+):(.*)@([^:/]+)(?::(\d+))?\/(.*)$/;
+  const match = trimmed.match(regex);
   if (match) {
     const [, user, rawPass, host, portStr, dbWithQuery] = match;
-    const dbName = dbWithQuery.split('?')[0];
-    // If rawPass is percent-encoded, decode it; otherwise use raw
+    const dbName = (dbWithQuery || 'postgres').split('?')[0];
+    
     let decodedPass = rawPass;
     try {
       decodedPass = decodeURIComponent(rawPass);
     } catch {
       decodedPass = rawPass;
     }
+
+    let decodedUser = user;
+    try {
+      decodedUser = decodeURIComponent(user);
+    } catch {
+      decodedUser = user;
+    }
+
+    const hostLower = host.toLowerCase();
+    if (hostLower.includes('.supabase.co') || hostLower.includes('.supabase.com')) {
+      const refMatch = hostLower.match(/db\.([a-z0-9]+)\.supabase\.co/i) || decodedUser.match(/postgres\.([a-z0-9]+)/i);
+      if (refMatch && refMatch[1]) {
+        lastDbProjectRef = refMatch[1];
+      }
+    }
+
+    lastDbHost = host;
+
     return {
-      user: decodeURIComponent(user),
+      user: decodedUser,
       password: decodedPass,
       host,
       port: portStr ? parseInt(portStr, 10) : 5432,
       database: dbName || 'postgres',
-      ssl: connStr.includes('sslmode=disable') ? false : { rejectUnauthorized: false }
+      ssl: trimmed.includes('sslmode=disable') ? false : { rejectUnauthorized: false },
+      connectionTimeoutMillis: 7000,
+      query_timeout: 10000,
+      idleTimeoutMillis: 30000,
+      max: 10
     };
   }
-  
+
+  // Fallback direct string config
   return {
-    connectionString: connStr,
-    ssl: connStr.includes('sslmode=disable') ? false : { rejectUnauthorized: false }
+    connectionString: trimmed,
+    ssl: trimmed.includes('sslmode=disable') ? false : { rejectUnauthorized: false },
+    connectionTimeoutMillis: 7000
   };
 }
 
-if (rawConnectionString || process.env.PGHOST) {
+function initializePool(connStr) {
+  const targetStr = connStr || rawConnectionString;
+  if (!targetStr && !process.env.PGHOST) {
+    pool = null;
+    return;
+  }
+
   try {
-    const config = parsePgConfig(rawConnectionString) || {
+    const config = parsePgConfig(targetStr) || {
       host: process.env.PGHOST,
       user: process.env.PGUSER,
       password: process.env.PGPASSWORD,
       database: process.env.PGDATABASE,
       port: process.env.PGPORT ? parseInt(process.env.PGPORT, 10) : 5432,
-      ssl: { rejectUnauthorized: false }
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 7000
     };
-    
+
+    if (pool) {
+      try { pool.end(); } catch {}
+    }
+
     pool = new Pool(config);
-    console.log('PostgreSQL/Supabase pool initialized successfully.');
+    rawConnectionString = targetStr;
+    console.log('PostgreSQL / Supabase client pool initialized.');
   } catch (err) {
     console.error('Error initializing PostgreSQL pool:', err.message);
     pool = null;
+    lastDbError = err.message;
   }
 }
+
+initializePool(rawConnectionString);
 
 // In-Memory fallback store
 const adminPasswordHash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
@@ -455,11 +535,16 @@ async function initDatabase() {
       }
 
       isConnectedToPostgres = true;
+      lastDbError = null;
+      lastDbErrorCode = null;
+      lastDbSuccessTime = new Date();
       console.log('✅ PostgreSQL / Supabase Database Connected & Synchronized Successfully!');
     } finally {
       client.release();
     }
   } catch (err) {
+    lastDbError = err.message;
+    lastDbErrorCode = err.code || null;
     console.warn('Could not connect to PostgreSQL server. Falling back to in-memory store:', err.message);
     isConnectedToPostgres = false;
   }
@@ -1259,10 +1344,196 @@ const db = {
         client.release();
       }
     } catch (err) {
+      lastDbError = err.message;
+      lastDbErrorCode = err.code || null;
       return {
         success: false,
         isConnected: false,
         error: err.message
+      };
+    }
+  },
+
+  async getSupabaseDiagnostics() {
+    let latencyMs = null;
+    let counts = {
+      products: memProducts.length,
+      product_images: memProductImages.length,
+      users: memUsers.length,
+      orders: memOrders.length,
+      categories: memCategories.length
+    };
+    let cloudCounts = null;
+    let sampleRows = [];
+    let serverTime = null;
+    let currentDatabase = 'postgres';
+    let currentHost = lastDbHost || (process.env.PGHOST || 'db.ijizfozhorgaidgjonws.supabase.co');
+
+    if (isConnectedToPostgres && pool) {
+      try {
+        const start = Date.now();
+        const pingRes = await pool.query('SELECT NOW() as server_time, current_database() as db_name');
+        latencyMs = Date.now() - start;
+        serverTime = pingRes.rows[0]?.server_time || new Date();
+        currentDatabase = pingRes.rows[0]?.db_name || 'postgres';
+
+        const [prodCount, imgCount, userCount, orderCount, catCount] = await Promise.all([
+          pool.query('SELECT COUNT(*) FROM products'),
+          pool.query('SELECT COUNT(*) FROM product_images'),
+          pool.query('SELECT COUNT(*) FROM users'),
+          pool.query('SELECT COUNT(*) FROM orders'),
+          pool.query('SELECT COUNT(*) FROM categories')
+        ]);
+
+        cloudCounts = {
+          products: parseInt(prodCount.rows[0].count, 10),
+          product_images: parseInt(imgCount.rows[0].count, 10),
+          users: parseInt(userCount.rows[0].count, 10),
+          orders: parseInt(orderCount.rows[0].count, 10),
+          categories: parseInt(catCount.rows[0].count, 10)
+        };
+
+        const prodSample = await pool.query(`
+          SELECT p.id, p.title, p.price, p.quantity, p.condition, p.location, p.phone, p.whatsapp_number, p.payment_code, p.approved, p.image, p.created_at, c.name as category_name
+          FROM products p
+          LEFT JOIN categories c ON p.category_id = c.id
+          ORDER BY p.id DESC
+          LIMIT 15
+        `);
+        sampleRows = prodSample.rows.map(r => ({ ...r, price: parseFloat(r.price), is_in_supabase: true }));
+      } catch (err) {
+        lastDbError = err.message;
+        lastDbErrorCode = err.code || null;
+      }
+    }
+
+    // Mask sensitive connection string for display
+    let maskedUrl = 'postgresql://postgres:••••••••@db.ijizfozhorgaidgjonws.supabase.co:5432/postgres';
+    if (rawConnectionString) {
+      maskedUrl = rawConnectionString.replace(/:([^:@]+)@/, ':••••••••@');
+    }
+
+    return {
+      isConnected: isConnectedToPostgres,
+      host: currentHost,
+      projectRef: lastDbProjectRef || 'ijizfozhorgaidgjonws',
+      database: currentDatabase,
+      maskedUrl,
+      rawConnectionString: rawConnectionString || '',
+      lastError: lastDbError,
+      lastErrorCode: lastDbErrorCode,
+      lastSuccessTime: lastDbSuccessTime,
+      latencyMs,
+      serverTime,
+      counts: cloudCounts || counts,
+      isFallback: !isConnectedToPostgres,
+      sampleRows
+    };
+  },
+
+  async getSupabaseRawProducts(limit = 50) {
+    if (isConnectedToPostgres && pool) {
+      try {
+        const res = await pool.query(`
+          SELECT p.id, p.title, p.description, p.price, p.quantity, p.condition, p.location, p.phone, p.seller_phone, p.whatsapp_number, p.payment_code, p.approved, p.image, p.created_at, c.name as category_name
+          FROM products p
+          LEFT JOIN categories c ON p.category_id = c.id
+          ORDER BY p.id DESC
+          LIMIT $1
+        `, [limit]);
+        return res.rows.map(r => ({ ...r, price: parseFloat(r.price), is_in_supabase: true }));
+      } catch (err) {
+        console.warn('Error fetching Supabase raw products:', err.message);
+      }
+    }
+    return memProducts.map(p => {
+      const cat = memCategories.find(c => c.id === p.category_id);
+      return { ...p, category_name: cat ? cat.name : 'General', is_in_supabase: false };
+    }).slice(0, limit);
+  },
+
+  async reconnectDatabase(targetInput) {
+    let connStr = '';
+    if (typeof targetInput === 'string') {
+      connStr = targetInput.trim();
+    } else if (targetInput && targetInput.connectionString) {
+      connStr = targetInput.connectionString.trim();
+    } else if (targetInput && targetInput.password) {
+      const pass = targetInput.password.trim();
+      const ref = (targetInput.projectRef || lastDbProjectRef || 'ijizfozhorgaidgjonws').trim();
+      const host = targetInput.host || (targetInput.usePooler ? `aws-0-eu-central-1.pooler.supabase.com` : `db.${ref}.supabase.co`);
+      const port = targetInput.port || (targetInput.usePooler ? 6543 : 5432);
+      const user = targetInput.usePooler ? `postgres.${ref}` : 'postgres';
+      const dbName = targetInput.database || 'postgres';
+      connStr = `postgresql://${user}:${encodeURIComponent(pass)}@${host}:${port}/${dbName}`;
+    }
+
+    if (!connStr) {
+      return {
+        success: false,
+        isConnected: false,
+        error: 'No database connection string or password provided.'
+      };
+    }
+
+    const testConfig = parsePgConfig(connStr);
+    if (!testConfig) {
+      return {
+        success: false,
+        isConnected: false,
+        error: 'Failed to parse database connection URI.'
+      };
+    }
+
+    const testPool = new Pool(testConfig);
+    try {
+      const client = await testPool.connect();
+      try {
+        await client.query('SELECT 1');
+      } finally {
+        client.release();
+      }
+
+      // If test succeeded, replace the global pool
+      if (pool) {
+        try { pool.end(); } catch {}
+      }
+      pool = testPool;
+      rawConnectionString = connStr;
+      saveConnectionStringToDisk(connStr);
+      isConnectedToPostgres = true;
+      lastDbError = null;
+      lastDbErrorCode = null;
+      lastDbSuccessTime = new Date();
+
+      // Run schema migrations and sync any in-memory products
+      await initDatabase();
+      const syncRes = await this.syncDatabase();
+
+      return {
+        success: true,
+        isConnected: true,
+        message: 'Successfully connected to Supabase PostgreSQL database! All tables and products are synchronized.',
+        counts: syncRes.counts || null
+      };
+    } catch (err) {
+      try { testPool.end(); } catch {}
+      lastDbError = err.message;
+      lastDbErrorCode = err.code || null;
+      
+      let helpfulAdvice = '';
+      if (err.code === '28P01' || (err.message && err.message.includes('password authentication failed'))) {
+        helpfulAdvice = 'Password Authentication Failed (Code: 28P01). The database password does not match your Supabase project. Go to Supabase Dashboard -> Project Settings -> Database -> Database password, reset/set your password, and enter the new password.';
+      } else if (err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT') {
+        helpfulAdvice = 'Network host unreachable or timed out. Please check your Supabase project status or try using the Supabase Connection Pooler URI (Session Mode or Transaction Mode).';
+      }
+
+      return {
+        success: false,
+        isConnected: isConnectedToPostgres,
+        error: err.message,
+        code: err.code || null,
+        helpfulAdvice
       };
     }
   },
