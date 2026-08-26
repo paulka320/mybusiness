@@ -529,16 +529,16 @@ async function initDatabase() {
         for (const prod of seedProducts) {
           const res = await client.query(`
             INSERT INTO products (title, description, price, category_id, phone, seller_phone, whatsapp_number, location, condition, image, image_url, payment_code, quantity, approved)
-            VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $9, $10, $11, 1)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1)
             RETURNING id
-          `, [prod.title, prod.description, prod.price, prod.category_id, prod.phone, prod.whatsapp_number, prod.location, prod.condition, prod.image, prod.payment_code, prod.quantity]);
+          `, [prod.title, prod.description, prod.price, prod.category_id, prod.phone, prod.phone, prod.whatsapp_number, prod.location, prod.condition, prod.image, prod.image, prod.payment_code, prod.quantity]);
           
           const newId = res.rows[0].id;
           for (let i = 0; i < prod.images.length; i++) {
             await client.query(`
               INSERT INTO product_images (product_id, image_path, image_url, is_main)
-              VALUES ($1, $2, $2, $3)
-            `, [newId, prod.images[i], i === 0]);
+              VALUES ($1, $2, $3, $4)
+            `, [newId, prod.images[i], prod.images[i], i === 0]);
           }
         }
         console.log(`✅ Seeded ${seedProducts.length} verified products into Supabase tables.`);
@@ -729,17 +729,17 @@ const db = {
 
       const res = await pool.query(`
         INSERT INTO products (title, description, price, category_id, phone, seller_phone, whatsapp_number, location, condition, image, image_url, payment_code, quantity, approved, seller_id)
-        VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $9, $10, $11, 1, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1, $14)
         RETURNING id
-      `, [title, description, parsedPrice, parsedCatId, phone, wa, location || 'Kampala, Uganda', condition, mainImage, payment_code, parsedQty, validSellerId]);
+      `, [title, description, parsedPrice, parsedCatId, phone, phone, wa, location || 'Kampala, Uganda', condition, mainImage, mainImage, payment_code, parsedQty, validSellerId]);
       
       const newProdId = res.rows[0].id;
       if (images && images.length > 0) {
         for (let i = 0; i < images.length; i++) {
           await pool.query(`
             INSERT INTO product_images (product_id, image_path, image_url, is_main)
-            VALUES ($1, $2, $2, $3)
-          `, [newProdId, images[i], i === 0]);
+            VALUES ($1, $2, $3, $4)
+          `, [newProdId, images[i], images[i], i === 0]);
         }
       }
       return newProdId;
@@ -1316,17 +1316,17 @@ const db = {
           if (checkRes.rows.length === 0) {
             const insRes = await client.query(`
               INSERT INTO products (title, description, price, category_id, phone, seller_phone, whatsapp_number, location, condition, image, image_url, payment_code, quantity, approved)
-              VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $9, $10, $11, 1)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1)
               RETURNING id
-            `, [p.title, p.description, p.price, p.category_id, p.phone, p.whatsapp_number, p.location || 'Kampala, Uganda', p.condition || 'Brand New', p.image, p.payment_code, p.quantity || 1]);
+            `, [p.title, p.description, p.price, p.category_id, p.phone, p.seller_phone || p.phone, p.whatsapp_number, p.location || 'Kampala, Uganda', p.condition || 'Brand New', p.image, p.image_url || p.image, p.payment_code, p.quantity || 1]);
             
             const newId = insRes.rows[0].id;
             const prodImgs = memProductImages.filter(img => img.product_id === p.id);
             for (let i = 0; i < prodImgs.length; i++) {
               await client.query(`
                 INSERT INTO product_images (product_id, image_path, image_url, is_main)
-                VALUES ($1, $2, $2, $3)
-              `, [newId, prodImgs[i].image_path || prodImgs[i].image_url, i === 0]);
+                VALUES ($1, $2, $3, $4)
+              `, [newId, prodImgs[i].image_path || prodImgs[i].image_url, prodImgs[i].image_url || prodImgs[i].image_path, i === 0]);
             }
           }
         }

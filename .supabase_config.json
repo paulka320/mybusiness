@@ -1,0 +1,5 @@
+{
+  "connectionString": "postgresql://postgres.ijizfozhorgaidgjonws:1234ZXCmqwERT@aws-1-eu-west-1.pooler.supabase.com:6543/postgres",
+  "supabaseUrl": "https://ijizfozhorgaidgjonws.supabase.co",
+  "savedAt": "2026-08-26T12:54:00.000Z"
+}
