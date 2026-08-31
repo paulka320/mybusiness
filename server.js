@@ -102,6 +102,45 @@ app.use(cookieParser(SESSION_SECRET));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(uploadsDir));
 
+// Image serving route with automatic Supabase Cloud recovery & SVG fallback
+app.get(['/uploads/:filename', '/public/uploads/:filename'], async (req, res) => {
+  const filename = path.basename(req.params.filename || '');
+  const filePath = path.join(uploadsDir, filename);
+
+  // 1. If file exists physically on disk, serve it immediately
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+
+  // 2. If file was cleared upon container restart, recover Base64 data from Supabase Cloud DB!
+  try {
+    const dataUrl = await db.getImageDataByFilename(filename);
+    if (dataUrl && dataUrl.startsWith('data:')) {
+      const parts = dataUrl.split(',');
+      if (parts.length === 2) {
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+        const buffer = Buffer.from(parts[1], 'base64');
+        try { fs.writeFileSync(filePath, buffer); } catch {}
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.send(buffer);
+      }
+    }
+  } catch (err) {
+    console.warn('[IMAGE RESTORE] Failed to restore from database:', err.message);
+  }
+
+  // 3. Clean SVG fallback if image is not yet uploaded or placeholder
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  const fallbackSvg = path.join(__dirname, 'public', 'phone-front.svg');
+  if (fs.existsSync(fallbackSvg)) {
+    return res.sendFile(fallbackSvg);
+  }
+  return res.status(404).send('Image placeholder');
+});
+
 // URL Normalizer: Fix any accidental double relative paths like /admin_dashboard.php/admin_dashboard.php
 app.use((req, res, next) => {
   if (req.originalUrl && req.originalUrl.includes('admin_dashboard.php/admin_dashboard.php')) {
@@ -367,17 +406,28 @@ app.get(['/product.php', '/product'], async (req, res) => {
     // Pending price request if any
     const pendingPriceRequest = await db.getPendingPriceChangeRequestsForProduct(id);
 
-    // Formatted WhatsApp URL for Uganda
-    const waNumber = db.sanitizeWhatsAppNumber(product.whatsapp_number || product.phone);
-    const waMessage = encodeURIComponent(`Hello! I am inquiring about "${product.title}" listed for UGX ${Number(product.price).toLocaleString()} on EasyMarket. Is it still available?`);
-    const waLink = waNumber ? `https://wa.me/${waNumber}?text=${waMessage}` : null;
+    // Official WhatsApp destination: 0763480495 (+256 763 480495)
+    // Opens the customer's WhatsApp web / app with messages directed to 0763480495
+    const targetWaNumber = '256763480495';
+    
+    // Include the buyer's registered credentials if logged in
+    const buyerName = req.session && req.session.user_name ? req.session.user_name : '';
+    const buyerPhone = req.session && req.session.user_phone ? req.session.user_phone : '';
+    let customerInfo = '';
+    if (buyerName) customerInfo += ` [Buyer: ${buyerName}`;
+    if (buyerPhone) customerInfo += ` | Contact: ${buyerPhone}`;
+    if (customerInfo) customerInfo += `]`;
+
+    const waMessageText = `Hello EasyMarket! I am inquiring about "${product.title}" (Listing #${product.id}, Price: UGX ${Number(product.price).toLocaleString()}, Location: ${product.location || 'Uganda'}). Is this product currently in stock and available for delivery/order?${customerInfo}`;
+    const waMessage = encodeURIComponent(waMessageText);
+    const waLink = `https://wa.me/${targetWaNumber}?text=${waMessage}`;
 
     res.render('product', {
       product,
       images,
       similar,
       waLink,
-      waNumber,
+      waNumber: targetWaNumber,
       isOwner,
       isAdmin,
       pendingPriceRequest
@@ -624,6 +674,26 @@ app.post(['/upload.php', '/upload'], upload.fields([
   }
 
   try {
+    const uploadedImages = [];
+    for (const fn of uploadedFiles) {
+      const filePath = path.join(uploadsDir, fn);
+      let dataUrl = '';
+      try {
+        if (fs.existsSync(filePath)) {
+          const buf = fs.readFileSync(filePath);
+          const ext = path.extname(fn).toLowerCase().replace('.', '') || 'jpeg';
+          const mimeType = ext === 'png' ? 'image/png' : (ext === 'webp' ? 'image/webp' : (ext === 'svg' ? 'image/svg+xml' : 'image/jpeg'));
+          dataUrl = `data:${mimeType};base64,${buf.toString('base64')}`;
+        }
+      } catch (e) {
+        console.warn('Could not read image file for base64 storage:', e.message);
+      }
+      uploadedImages.push({
+        filename: fn,
+        dataUrl: dataUrl || `/uploads/${fn}`
+      });
+    }
+
     const newProdId = await db.createProduct({
       title,
       description,
@@ -634,7 +704,7 @@ app.post(['/upload.php', '/upload'], upload.fields([
       location,
       payment_code: payment,
       quantity,
-      images: uploadedFiles,
+      images: uploadedImages,
       seller_id: (req.session && req.session.user_id) ? req.session.user_id : null
     });
 

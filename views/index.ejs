@@ -47,13 +47,20 @@
     </section>
     <% } %>
 
+<%
+    const searchVal = locals.search || '';
+    const catSelected = locals.categorySelected || null;
+    const minP = locals.minPrice || 0;
+    const maxP = locals.maxPrice || 0;
+    const sortVal = locals.sort || 'newest';
+%>
     <section class="hero section">
         <div class="hero-copy">
             <span class="eyebrow">Shop with confidence</span>
             <h1>Discover the best deals across Uganda</h1>
             <p>Search phones, fashion, electronics, home appliances and more from trusted sellers.</p>
             <form class="hero-search" method="GET" action="index.php">
-                <input type="search" name="search" value="<%= search %>" placeholder="Search products, brands or categories">
+                <input type="search" name="search" value="<%= searchVal %>" placeholder="Search products, brands or categories">
                 <button type="submit">Search</button>
             </form>
         </div>
@@ -65,8 +72,8 @@
             <h2>Shop by Category</h2>
         </div>
         <div class="category-list">
-            <% categories.forEach(function(cat) { %>
-                <a href="category.php?id=<%= cat.id %>" class="category-pill<%= categorySelected === cat.id ? ' active' : '' %>"><%= cat.name %></a>
+            <% (locals.categories || []).forEach(function(cat) { %>
+                <a href="category.php?id=<%= cat.id %>" class="category-pill<%= catSelected === cat.id ? ' active' : '' %>"><%= cat.name %></a>
             <% }); %>
         </div>
     </section>
@@ -78,26 +85,26 @@
                     <label>Category</label>
                     <select name="category_id">
                         <option value="">All categories</option>
-                        <% categories.forEach(function(cat) { %>
-                            <option value="<%= cat.id %>" <%= categorySelected === cat.id ? 'selected' : '' %>><%= cat.name %></option>
+                        <% (locals.categories || []).forEach(function(cat) { %>
+                            <option value="<%= cat.id %>" <%= catSelected === cat.id ? 'selected' : '' %>><%= cat.name %></option>
                         <% }); %>
                     </select>
                 </div>
                 <div class="filter-field">
                     <label>Min price</label>
-                    <input type="number" name="price_min" min="0" value="<%= minPrice > 0 ? minPrice : '' %>" placeholder="0">
+                    <input type="number" name="price_min" min="0" value="<%= minP > 0 ? minP : '' %>" placeholder="0">
                 </div>
                 <div class="filter-field">
                     <label>Max price</label>
-                    <input type="number" name="price_max" min="0" value="<%= maxPrice > 0 ? maxPrice : '' %>" placeholder="0">
+                    <input type="number" name="price_max" min="0" value="<%= maxP > 0 ? maxP : '' %>" placeholder="0">
                 </div>
                 <div class="filter-field">
                     <label>Sort by</label>
                     <select name="sort">
-                        <option value="newest" <%= sort === 'newest' ? 'selected' : '' %>>Newest</option>
-                        <option value="price_asc" <%= sort === 'price_asc' ? 'selected' : '' %>>Price: Low to High</option>
-                        <option value="price_desc" <%= sort === 'price_desc' ? 'selected' : '' %>>Price: High to Low</option>
-                        <option value="title" <%= sort === 'title' ? 'selected' : '' %>>Title A–Z</option>
+                        <option value="newest" <%= sortVal === 'newest' ? 'selected' : '' %>>Newest</option>
+                        <option value="price_asc" <%= sortVal === 'price_asc' ? 'selected' : '' %>>Price: Low to High</option>
+                        <option value="price_desc" <%= sortVal === 'price_desc' ? 'selected' : '' %>>Price: High to Low</option>
+                        <option value="title" <%= sortVal === 'title' ? 'selected' : '' %>>Title A–Z</option>
                     </select>
                 </div>
             </div>
@@ -110,7 +117,7 @@
 
     <section class="section products-section">
         <div class="section-heading">
-            <h2><%= search ? ('Search results for "' + search + '"') : 'Latest Deals' %></h2>
+            <h2><%= searchVal ? ('Search results for "' + searchVal + '"') : 'Latest Deals' %></h2>
         </div>
 
         <% if (products && products.length > 0) { %>

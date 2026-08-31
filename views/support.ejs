@@ -81,14 +81,14 @@
         <!-- My Past Tickets -->
         <div style="background: white; padding: 24px; border-radius: 18px; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px rgba(0,0,0,0.03);">
             <h3 style="margin: 0 0 16px; font-size: 18px;">My Support History</h3>
-            <% if (!tickets || tickets.length === 0) { %>
+            <% if (!locals.tickets || locals.tickets.length === 0) { %>
                 <div style="text-align: center; color: #64748b; padding: 30px 10px;">
                     <span style="font-size: 32px; display: block; margin-bottom: 8px;">📬</span>
                     <p style="margin: 0; font-size: 14px;">You have no active support tickets.</p>
                 </div>
             <% } else { %>
                 <div style="display: flex; flex-direction: column; gap: 14px;">
-                    <% tickets.forEach(function(t) { %>
+                    <% locals.tickets.forEach(function(t) { %>
                         <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; background: #f8fafc;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                                 <strong style="font-size: 14px; color: #1e293b;"><%= t.subject %></strong>

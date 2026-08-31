@@ -507,16 +507,16 @@ async function initDatabase() {
   }
 }
 
-// Format Uganda WhatsApp phone number cleanly (e.g. "+256 701 234567" or "0701234567" -> "256701234567")
+// Format Uganda WhatsApp phone number cleanly (e.g. "+256 701 234567" or "0763480495" -> "256763480495")
 function sanitizeWhatsAppNumber(phone) {
-  if (!phone) return '';
-  let cleaned = phone.replace(/[^0-9]/g, '');
+  if (!phone) return '256763480495';
+  let cleaned = phone.toString().replace(/[^0-9]/g, '');
   if (cleaned.startsWith('0') && cleaned.length === 10) {
     cleaned = '256' + cleaned.substring(1);
   } else if (!cleaned.startsWith('256') && cleaned.length === 9) {
     cleaned = '256' + cleaned;
   }
-  return cleaned;
+  return cleaned || '256763480495';
 }
 
 const db = {
@@ -645,8 +645,10 @@ const db = {
   },
 
   async createProduct({ title, description, price, category_id, phone, whatsapp_number, location, payment_code, quantity, images, seller_id, condition = 'Brand New' }) {
-    const mainImage = (images && images.length > 0) ? images[0] : 'phone-front.svg';
-    const wa = sanitizeWhatsAppNumber(whatsapp_number || phone);
+    const mainImageItem = (images && images.length > 0) ? images[0] : null;
+    const mainImageFile = mainImageItem ? (typeof mainImageItem === 'object' ? mainImageItem.filename : mainImageItem) : 'phone-front.svg';
+    const mainImageUrl = mainImageItem ? (typeof mainImageItem === 'object' ? (mainImageItem.dataUrl || mainImageItem.filename) : mainImageItem) : '/phone-front.svg';
+    const wa = sanitizeWhatsAppNumber(whatsapp_number || phone || '0763480495');
     const parsedPrice = isNaN(parseFloat(price)) ? 0 : parseFloat(price);
     const parsedQty = isNaN(parseInt(quantity, 10)) ? 1 : Math.max(1, parseInt(quantity, 10));
     let parsedCatId = parseInt(category_id, 10) || 1;
@@ -682,15 +684,18 @@ const db = {
         INSERT INTO products (title, description, price, category_id, phone, seller_phone, whatsapp_number, location, condition, image, image_url, payment_code, quantity, approved, seller_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1, $14)
         RETURNING id
-      `, [title, description, parsedPrice, parsedCatId, phone, phone, wa, location || 'Kampala, Uganda', condition, mainImage, mainImage, payment_code, parsedQty, validSellerId]);
+      `, [title, description, parsedPrice, parsedCatId, phone, phone, wa, location || 'Kampala, Uganda', condition, mainImageFile, mainImageUrl, payment_code, parsedQty, validSellerId]);
       
       const newProdId = res.rows[0].id;
       if (images && images.length > 0) {
         for (let i = 0; i < images.length; i++) {
+          const item = images[i];
+          const fn = typeof item === 'object' ? item.filename : item;
+          const dUrl = typeof item === 'object' ? (item.dataUrl || item.filename) : item;
           await pool.query(`
             INSERT INTO product_images (product_id, image_path, image_url, is_main)
             VALUES ($1, $2, $3, $4)
-          `, [newProdId, images[i], images[i], i === 0]);
+          `, [newProdId, fn, dUrl, i === 0]);
         }
       }
       return newProdId;
@@ -709,8 +714,8 @@ const db = {
       has_whatsapp: !!wa,
       location: location || 'Kampala, Uganda',
       condition,
-      image: mainImage,
-      image_url: mainImage,
+      image: mainImageFile,
+      image_url: mainImageUrl,
       payment_code,
       quantity: parsedQty,
       approved: 1,
@@ -719,12 +724,14 @@ const db = {
     });
 
     if (images && images.length > 0) {
-      images.forEach((file, index) => {
+      images.forEach((item, index) => {
+        const fn = typeof item === 'object' ? item.filename : item;
+        const dUrl = typeof item === 'object' ? (item.dataUrl || item.filename) : item;
         memProductImages.push({
           id: memNextImgId++,
           product_id: newProdId,
-          image_path: file,
-          image_url: file,
+          image_path: fn,
+          image_url: dUrl,
           is_main: index === 0 ? 1 : 0
         });
       });
@@ -1162,6 +1169,48 @@ const db = {
     memPriceChangeRequests = memPriceChangeRequests.filter(r => r.product_id !== pId);
     memProducts = memProducts.filter(p => p.id !== pId);
     memProductImages = memProductImages.filter(img => img.product_id !== pId);
+  },
+
+  async clearAllProducts() {
+    if (isConnectedToPostgres && pool) {
+      try {
+        await pool.query('DELETE FROM price_change_requests');
+      } catch {}
+      try {
+        await pool.query('DELETE FROM product_images');
+      } catch {}
+      try {
+        await pool.query('DELETE FROM products');
+      } catch {}
+      return;
+    }
+    memPriceChangeRequests = [];
+    memProducts = [];
+    memProductImages = [];
+  },
+
+  async getImageDataByFilename(filename) {
+    if (!filename) return null;
+    const cleanFn = filename.replace('/uploads/', '').replace('uploads/', '');
+    if (isConnectedToPostgres && pool) {
+      try {
+        const imgRes = await pool.query('SELECT image_url FROM product_images WHERE image_path = $1 OR image_url LIKE $2 LIMIT 1', [cleanFn, `%${cleanFn}%`]);
+        if (imgRes.rows.length > 0 && imgRes.rows[0].image_url && imgRes.rows[0].image_url.startsWith('data:')) {
+          return imgRes.rows[0].image_url;
+        }
+        const prodRes = await pool.query('SELECT image_url FROM products WHERE image = $1 OR image_url LIKE $2 LIMIT 1', [cleanFn, `%${cleanFn}%`]);
+        if (prodRes.rows.length > 0 && prodRes.rows[0].image_url && prodRes.rows[0].image_url.startsWith('data:')) {
+          return prodRes.rows[0].image_url;
+        }
+      } catch (err) {
+        console.warn('Error fetching image from DB:', err.message);
+      }
+    }
+    const memImg = memProductImages.find(i => i.image_path === cleanFn || (i.image_url && i.image_url.includes(cleanFn)));
+    if (memImg && memImg.image_url && memImg.image_url.startsWith('data:')) return memImg.image_url;
+    const memP = memProducts.find(p => p.image === cleanFn || (p.image_url && p.image_url.includes(cleanFn)));
+    if (memP && memP.image_url && memP.image_url.startsWith('data:')) return memP.image_url;
+    return null;
   },
 
   async findUserByEmailOrUsername(emailOrUsername) {

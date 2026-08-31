@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="100%" stop-color="#e2e8f0"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#bgGrad)"/>
+  <rect x="30" y="30" width="340" height="340" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <!-- Shopping Bag / Product Box Graphic -->
+  <g transform="translate(130, 110)">
+    <rect x="15" y="45" width="110" height="110" rx="12" fill="url(#accentGrad)" opacity="0.9"/>
+    <path d="M 40 45 C 40 18, 100 18, 100 45" fill="none" stroke="#2563eb" stroke-width="8" stroke-linecap="round"/>
+    <path d="M 50 85 L 70 105 L 105 70" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="70" cy="125" r="4" fill="#ffffff"/>
+  </g>
+  <text x="200" y="290" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="700" fill="#1e293b">EasyMarket Product</text>
+  <text x="200" y="315" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="500" fill="#64748b">Verified Uganda Listing</text>
+</svg>

@@ -309,7 +309,7 @@
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px;">
             <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 16px;">
                 <div style="font-size: 12px; font-weight: 700; color: #1e40af; text-transform: uppercase;">🔵 Total Listed Catalog</div>
-                <div style="font-size: 1.6rem; font-weight: 800; color: #1d4ed8; margin: 4px 0;"><%= locals.allProductsCount || products.length %> Products</div>
+                <div style="font-size: 1.6rem; font-weight: 800; color: #1d4ed8; margin: 4px 0;"><%= locals.allProductsCount || (locals.products ? locals.products.length : 0) %> Products</div>
                 <div style="font-size: 12px; color: #3b82f6;">Total stock units: <strong><%= stats.inventory.totalStockUnits %></strong></div>
             </div>
 
@@ -346,7 +346,7 @@
                 </div>
 
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <% if (products && products.length > 0) { %>
+                    <% if (locals.products && locals.products.length > 0) { %>
                         <form method="POST" action="/admin_dashboard/clear-all-products" onsubmit="return confirm('WARNING: Are you sure you want to permanently delete ALL testing/demo products from the database and start with a clean catalog?');">
                             <button type="submit" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
                                 🗑️ Clear All Test Products
@@ -367,7 +367,7 @@
             <!-- View Filter Pills -->
             <div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px;">
                 <a href="/admin_dashboard?tab=inventory&filter=all" style="text-decoration: none; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 700; <%= (locals.filter === 'all' || !locals.filter) ? 'background: #0f172a; color: #ffffff;' : 'background: #f1f5f9; color: #475569;' %>">
-                    All Products (<%= locals.allProductsCount || products.length %>)
+                    All Products (<%= locals.allProductsCount || (locals.products ? locals.products.length : 0) %>)
                 </a>
                 <a href="/admin_dashboard?tab=inventory&filter=available" style="text-decoration: none; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 700; <%= locals.filter === 'available' ? 'background: #16a34a; color: #ffffff;' : 'background: #dcfce7; color: #166534;' %>">
                     🟢 Available Products (<%= locals.availableCount || 0 %>)
@@ -400,7 +400,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <% if (!products || products.length === 0) { %>
+                        <% if (!locals.products || locals.products.length === 0) { %>
                             <tr>
                                 <td colspan="8" style="text-align: center; padding: 36px; color: #64748b;">
                                     <div style="font-size: 28px; margin-bottom: 8px;">🛍️</div>
@@ -408,7 +408,7 @@
                                 </td>
                             </tr>
                         <% } else { %>
-                            <% products.forEach(function(p) { %>
+                            <% locals.products.forEach(function(p) { %>
                                 <% 
                                     var isSold = (p.quantity <= 0);
                                     var itemGross = (p.price || 0) * (p.quantity || 0);
