@@ -146,11 +146,11 @@
         <% } else { %>
             <div class="empty-state">
                 <div class="empty-state-icon">🛍️</div>
-                <h3><%= search ? 'No matching products found' : 'No products listed yet' %></h3>
-                <p><%= search ? ('We could not find any items matching "' + search + '". Try checking your spelling or clearing filters.') : 'Be the first seller to list a verified product with multi-angle photos on EasyMarket Uganda!' %></p>
+                <h3><%= searchVal ? 'No matching products found' : 'No products listed yet' %></h3>
+                <p><%= searchVal ? ('We could not find any items matching "' + searchVal + '". Try checking your spelling or clearing filters.') : 'Be the first seller to list a verified product with multi-angle photos on EasyMarket Uganda!' %></p>
                 <div class="empty-state-actions">
                     <a href="upload.php" class="btn-primary">➕ List a Product Now</a>
-                    <% if (search || categorySelected || minPrice > 0 || maxPrice > 0) { %>
+                    <% if (searchVal || catSelected || minP > 0 || maxP > 0) { %>
                         <a href="index.php" class="btn-secondary">Clear Filters</a>
                     <% } %>
                 </div>

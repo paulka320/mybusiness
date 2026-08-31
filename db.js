@@ -156,6 +156,52 @@ function initializePool(connStr) {
 
 initializePool(rawConnectionString);
 
+// Helper to execute PostgreSQL queries with automatic retry and error recovery
+async function executePgQuery(text, params = []) {
+  if (!pool) {
+    initializePool(rawConnectionString);
+  }
+  if (!pool) {
+    throw new Error('Database connection pool is not initialized.');
+  }
+
+  try {
+    const res = await pool.query(text, params);
+    isConnectedToPostgres = true;
+    lastDbSuccessTime = new Date();
+    lastDbError = null;
+    return res;
+  } catch (err) {
+    console.warn(`[PG QUERY WARNING] Query "${text.trim().substring(0, 60)}..." error:`, err.message);
+    const isConnErr = err.code === 'ECONNRESET' || 
+                      err.code === '57P01' || 
+                      err.code === '08006' || 
+                      err.code === '08001' || 
+                      err.message.includes('Connection terminated') || 
+                      err.message.includes('closed') ||
+                      err.message.includes('timeout');
+
+    if (isConnErr) {
+      console.log('[PG RECONNECT] Re-initializing pool and retrying query...');
+      try {
+        initializePool(rawConnectionString);
+        if (pool) {
+          const retryRes = await pool.query(text, params);
+          isConnectedToPostgres = true;
+          lastDbSuccessTime = new Date();
+          lastDbError = null;
+          return retryRes;
+        }
+      } catch (retryErr) {
+        lastDbError = retryErr.message;
+        console.error('[PG RETRY FAILED]', retryErr.message);
+      }
+    }
+    lastDbError = err.message;
+    throw err;
+  }
+}
+
 // In-Memory fallback store
 const adminPasswordHash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
 
@@ -491,6 +537,63 @@ async function initDatabase() {
         }
       }
 
+      // 5. Auto-repair & link unassigned products to verified seller accounts
+      try {
+        await client.query(`
+          UPDATE products p
+          SET seller_id = u.id
+          FROM users u
+          WHERE p.seller_id IS NULL 
+            AND u.is_admin = 0
+            AND (
+              RIGHT(REGEXP_REPLACE(COALESCE(p.phone,''), '[^0-9]', '', 'g'), 9) = RIGHT(REGEXP_REPLACE(COALESCE(u.phone,''), '[^0-9]', '', 'g'), 9)
+              OR RIGHT(REGEXP_REPLACE(COALESCE(p.seller_phone,''), '[^0-9]', '', 'g'), 9) = RIGHT(REGEXP_REPLACE(COALESCE(u.phone,''), '[^0-9]', '', 'g'), 9)
+            )
+        `);
+
+        // Ensure all active products have approved=1 and quantity >= 1
+        await client.query(`
+          UPDATE products 
+          SET approved = 1 
+          WHERE approved IS NULL OR approved = 0;
+        `);
+
+        await client.query(`
+          UPDATE products 
+          SET quantity = 1 
+          WHERE quantity IS NULL OR quantity < 0;
+        `);
+      } catch (linkErr) {
+        console.warn('Non-blocking product auto-link notice:', linkErr.message);
+      }
+
+      // 6. Pre-cache all products & categories from PostgreSQL into memory cache
+      try {
+        const catRes = await client.query('SELECT * FROM categories ORDER BY id ASC');
+        if (catRes.rows.length > 0) {
+          memCategories = catRes.rows;
+        }
+
+        const prodRes = await client.query(`
+          SELECT p.*, c.name as category_name, u.name as seller_name, u.email as seller_email, u.phone as seller_user_phone
+          FROM products p 
+          LEFT JOIN categories c ON p.category_id = c.id 
+          LEFT JOIN users u ON p.seller_id = u.id
+          ORDER BY p.id DESC
+        `);
+        if (prodRes.rows.length > 0) {
+          memProducts = prodRes.rows.map(r => ({
+            ...r,
+            price: isNaN(parseFloat(r.price)) ? 0 : parseFloat(r.price),
+            quantity: isNaN(parseInt(r.quantity, 10)) ? 1 : Math.max(0, parseInt(r.quantity, 10)),
+            approved: (r.approved === true || r.approved === 1 || r.approved === '1' || r.approved == null || r.approved === 'true') ? 1 : 0,
+            category_name: r.category_name || 'General'
+          }));
+        }
+      } catch (cacheErr) {
+        console.warn('Memory cache warm-up notice:', cacheErr.message);
+      }
+
       isConnectedToPostgres = true;
       lastDbError = null;
       lastDbErrorCode = null;
@@ -523,54 +626,68 @@ const db = {
   sanitizeWhatsAppNumber,
 
   async getCategories() {
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query('SELECT * FROM categories ORDER BY id ASC');
+    try {
+      const res = await executePgQuery('SELECT * FROM categories ORDER BY id ASC');
+      if (res.rows.length > 0) {
+        memCategories = res.rows;
+      }
       return res.rows;
+    } catch (err) {
+      return memCategories;
     }
-    return memCategories;
   },
 
   async getCategoryById(id) {
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query('SELECT * FROM categories WHERE id = $1', [id]);
+    const cId = parseInt(id, 10);
+    if (!cId) return null;
+    try {
+      const res = await executePgQuery('SELECT * FROM categories WHERE id = $1', [cId]);
       return res.rows[0] || null;
+    } catch (err) {
+      return memCategories.find(c => c.id === cId) || null;
     }
-    return memCategories.find(c => c.id === id) || null;
   },
 
   async getProducts(filterFn = null) {
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query(`
-        SELECT p.*, c.name as category_name 
+    try {
+      const res = await executePgQuery(`
+        SELECT p.*, c.name as category_name, u.name as seller_name, u.email as seller_email, u.phone as seller_user_phone
         FROM products p 
         LEFT JOIN categories c ON p.category_id = c.id 
+        LEFT JOIN users u ON p.seller_id = u.id
         ORDER BY p.id DESC
       `);
       let list = res.rows.map(r => ({
         ...r,
         price: isNaN(parseFloat(r.price)) ? 0 : parseFloat(r.price),
-        quantity: isNaN(parseInt(r.quantity, 10)) ? 1 : parseInt(r.quantity, 10),
-        approved: (r.approved === true || r.approved === 1 || r.approved === '1' || r.approved == null || r.approved === 'true') ? 1 : 0
+        quantity: isNaN(parseInt(r.quantity, 10)) ? 1 : Math.max(0, parseInt(r.quantity, 10)),
+        approved: (r.approved === true || r.approved === 1 || r.approved === '1' || r.approved == null || r.approved === 'true') ? 1 : 0,
+        category_name: r.category_name || 'General'
       }));
+      // Keep memory cache updated with real database records
+      memProducts = [...list];
+
+      if (filterFn) {
+        list = list.filter(filterFn);
+      }
+      return list;
+    } catch (err) {
+      console.warn('Using cached products due to fetch error:', err.message);
+      let list = memProducts.map(p => {
+        const cat = memCategories.find(c => c.id === p.category_id);
+        return {
+          ...p,
+          price: isNaN(parseFloat(p.price)) ? 0 : parseFloat(p.price),
+          quantity: isNaN(parseInt(p.quantity, 10)) ? 1 : Math.max(0, parseInt(p.quantity, 10)),
+          approved: (p.approved === true || p.approved === 1 || p.approved === '1' || p.approved == null || p.approved === 'true') ? 1 : 0,
+          category_name: cat ? cat.name : (p.category_name || 'General')
+        };
+      });
       if (filterFn) {
         list = list.filter(filterFn);
       }
       return list;
     }
-    let list = memProducts.map(p => {
-      const cat = memCategories.find(c => c.id === p.category_id);
-      return {
-        ...p,
-        price: isNaN(parseFloat(p.price)) ? 0 : parseFloat(p.price),
-        quantity: isNaN(parseInt(p.quantity, 10)) ? 1 : parseInt(p.quantity, 10),
-        approved: (p.approved === true || p.approved === 1 || p.approved === '1' || p.approved == null || p.approved === 'true') ? 1 : 0,
-        category_name: cat ? cat.name : 'General'
-      };
-    });
-    if (filterFn) {
-      list = list.filter(filterFn);
-    }
-    return list;
   },
 
   async getAllProducts() {
@@ -578,70 +695,81 @@ const db = {
   },
 
   async getProductById(id) {
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query(`
-        SELECT p.*, c.name as category_name 
+    const pId = parseInt(id, 10);
+    if (!pId) return null;
+    try {
+      const res = await executePgQuery(`
+        SELECT p.*, c.name as category_name, u.name as seller_name, u.email as seller_email, u.phone as seller_user_phone
         FROM products p 
         LEFT JOIN categories c ON p.category_id = c.id 
+        LEFT JOIN users u ON p.seller_id = u.id
         WHERE p.id = $1
-      `, [id]);
+      `, [pId]);
       if (res.rows.length === 0) return null;
       const row = res.rows[0];
       return {
         ...row,
         price: isNaN(parseFloat(row.price)) ? 0 : parseFloat(row.price),
-        quantity: isNaN(parseInt(row.quantity, 10)) ? 1 : parseInt(row.quantity, 10),
-        approved: (row.approved === true || row.approved === 1 || row.approved === '1' || row.approved == null || row.approved === 'true') ? 1 : 0
+        quantity: isNaN(parseInt(row.quantity, 10)) ? 1 : Math.max(0, parseInt(row.quantity, 10)),
+        approved: (row.approved === true || row.approved === 1 || row.approved === '1' || row.approved == null || row.approved === 'true') ? 1 : 0,
+        category_name: row.category_name || 'General'
+      };
+    } catch (err) {
+      const p = memProducts.find(item => item.id === pId);
+      if (!p) return null;
+      const cat = memCategories.find(c => c.id === p.category_id);
+      return {
+        ...p,
+        price: isNaN(parseFloat(p.price)) ? 0 : parseFloat(p.price),
+        quantity: isNaN(parseInt(p.quantity, 10)) ? 1 : Math.max(0, parseInt(p.quantity, 10)),
+        approved: (p.approved === true || p.approved === 1 || p.approved === '1' || p.approved == null || p.approved === 'true') ? 1 : 0,
+        category_name: cat ? cat.name : (p.category_name || 'General')
       };
     }
-    const p = memProducts.find(item => item.id === id);
-    if (!p) return null;
-    const cat = memCategories.find(c => c.id === p.category_id);
-    return {
-      ...p,
-      price: isNaN(parseFloat(p.price)) ? 0 : parseFloat(p.price),
-      quantity: isNaN(parseInt(p.quantity, 10)) ? 1 : parseInt(p.quantity, 10),
-      approved: (p.approved === true || p.approved === 1 || p.approved === '1' || p.approved == null || p.approved === 'true') ? 1 : 0,
-      category_name: cat ? cat.name : 'General'
-    };
   },
 
   async getProductImages(productId) {
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query('SELECT id, product_id, COALESCE(image_url, image_path) AS image_path, COALESCE(image_url, image_path) AS image_url, is_main FROM product_images WHERE product_id = $1 ORDER BY is_main DESC, id ASC', [productId]);
+    const pId = parseInt(productId, 10);
+    if (!pId) return [];
+    try {
+      const res = await executePgQuery('SELECT id, product_id, COALESCE(image_url, image_path) AS image_path, COALESCE(image_url, image_path) AS image_url, is_main FROM product_images WHERE product_id = $1 ORDER BY is_main DESC, id ASC', [pId]);
       if (res.rows.length > 0) {
         return res.rows;
       }
-      const prodRes = await pool.query('SELECT COALESCE(image_url, image) AS image FROM products WHERE id = $1', [productId]);
+      const prodRes = await executePgQuery('SELECT COALESCE(image_url, image) AS image FROM products WHERE id = $1', [pId]);
       if (prodRes.rows.length > 0 && prodRes.rows[0].image) {
-        return [{ id: 0, product_id: productId, image_path: prodRes.rows[0].image, image_url: prodRes.rows[0].image, is_main: 1 }];
+        return [{ id: 0, product_id: pId, image_path: prodRes.rows[0].image, image_url: prodRes.rows[0].image, is_main: 1 }];
+      }
+      return [];
+    } catch (err) {
+      const memList = memProductImages.filter(img => img.product_id === pId);
+      if (memList.length > 0) return memList;
+      const p = memProducts.find(item => item.id === pId);
+      if (p && (p.image || p.image_url)) {
+        const img = p.image_url || p.image;
+        return [{ id: 0, product_id: pId, image_path: img, image_url: img, is_main: 1 }];
       }
       return [];
     }
-    const memList = memProductImages.filter(img => img.product_id === productId);
-    if (memList.length > 0) return memList;
-    const p = memProducts.find(item => item.id === productId);
-    if (p && (p.image || p.image_url)) {
-      const img = p.image_url || p.image;
-      return [{ id: 0, product_id: productId, image_path: img, image_url: img, is_main: 1 }];
-    }
-    return [];
   },
 
   async getSimilarProducts(categoryId, currentId, limit = 4) {
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query(`
+    const cId = parseInt(categoryId, 10);
+    const pId = parseInt(currentId, 10);
+    try {
+      const res = await executePgQuery(`
         SELECT p.*, COALESCE(p.image_url, p.image) as image, COALESCE(p.image_url, p.image) as image_url, c.name as category_name
         FROM products p 
         LEFT JOIN categories c ON p.category_id = c.id
-        WHERE p.category_id = $1 AND p.id != $2 AND (p.approved = 1 OR p.approved IS NULL OR p.approved = true) AND p.quantity > 0
+        WHERE p.category_id = $1 AND p.id != $2 AND (p.approved = 1 OR p.approved IS NULL OR p.approved = true)
         ORDER BY p.id DESC LIMIT $3
-      `, [categoryId, currentId, limit]);
+      `, [cId, pId, limit]);
       return res.rows.map(r => ({ ...r, price: parseFloat(r.price) }));
+    } catch (err) {
+      return memProducts
+        .filter(p => p.category_id === cId && p.id !== pId && (p.approved === 1 || p.approved == null))
+        .slice(0, limit);
     }
-    return memProducts
-      .filter(p => p.category_id === categoryId && p.id !== currentId && (p.approved === 1 || p.approved == null) && p.quantity > 0)
-      .slice(0, limit);
   },
 
   async createProduct({ title, description, price, category_id, phone, whatsapp_number, location, payment_code, quantity, images, seller_id, condition = 'Brand New' }) {
@@ -649,95 +777,130 @@ const db = {
     const mainImageFile = mainImageItem ? (typeof mainImageItem === 'object' ? mainImageItem.filename : mainImageItem) : 'phone-front.svg';
     const mainImageUrl = mainImageItem ? (typeof mainImageItem === 'object' ? (mainImageItem.dataUrl || mainImageItem.filename) : mainImageItem) : '/phone-front.svg';
     const wa = sanitizeWhatsAppNumber(whatsapp_number || phone || '0763480495');
-    const parsedPrice = isNaN(parseFloat(price)) ? 0 : parseFloat(price);
+    const parsedPrice = isNaN(parseFloat(price)) ? 0 : Math.max(0, parseFloat(price));
     const parsedQty = isNaN(parseInt(quantity, 10)) ? 1 : Math.max(1, parseInt(quantity, 10));
     let parsedCatId = parseInt(category_id, 10) || 1;
 
-    if (isConnectedToPostgres && pool) {
+    let validSellerId = seller_id ? parseInt(seller_id, 10) : null;
+
+    try {
       // 1. Sanitize category ID against PostgreSQL categories
-      try {
-        const catRes = await pool.query('SELECT id FROM categories WHERE id = $1', [parsedCatId]);
-        if (catRes.rows.length === 0) {
-          const firstCat = await pool.query('SELECT id FROM categories ORDER BY id ASC LIMIT 1');
-          if (firstCat.rows.length > 0) {
-            parsedCatId = firstCat.rows[0].id;
-          }
-        }
-      } catch (err) {
-        console.warn('Error checking category in PG:', err.message);
-      }
-
-      // 2. Sanitize seller_id to avoid FK constraint failures
-      let validSellerId = null;
-      if (seller_id) {
-        try {
-          const userRes = await pool.query('SELECT id FROM users WHERE id = $1', [seller_id]);
-          if (userRes.rows.length > 0) {
-            validSellerId = seller_id;
-          }
-        } catch (err) {
-          console.warn('Error checking seller in PG:', err.message);
+      const catRes = await executePgQuery('SELECT id FROM categories WHERE id = $1', [parsedCatId]);
+      if (catRes.rows.length === 0) {
+        const firstCat = await executePgQuery('SELECT id FROM categories ORDER BY id ASC LIMIT 1');
+        if (firstCat.rows.length > 0) {
+          parsedCatId = firstCat.rows[0].id;
         }
       }
 
-      const res = await pool.query(`
+      // 2. Resolve seller_id to ensure proper linkage
+      if (validSellerId) {
+        const userRes = await executePgQuery('SELECT id FROM users WHERE id = $1', [validSellerId]);
+        if (userRes.rows.length === 0) {
+          validSellerId = null;
+        }
+      }
+
+      // If seller_id is still not set, match user by phone
+      if (!validSellerId && phone) {
+        const cleanP = phone.replace(/[^0-9]/g, '');
+        if (cleanP.length >= 9) {
+          const uRes = await executePgQuery(`
+            SELECT id FROM users 
+            WHERE is_admin = 0 AND (
+              RIGHT(REGEXP_REPLACE(COALESCE(phone,''), '[^0-9]', '', 'g'), 9) = $1
+              OR RIGHT(REGEXP_REPLACE(COALESCE(whatsapp_number,''), '[^0-9]', '', 'g'), 9) = $1
+            )
+            LIMIT 1
+          `, [cleanP.slice(-9)]);
+          if (uRes.rows.length > 0) {
+            validSellerId = uRes.rows[0].id;
+          }
+        }
+      }
+
+      const res = await executePgQuery(`
         INSERT INTO products (title, description, price, category_id, phone, seller_phone, whatsapp_number, location, condition, image, image_url, payment_code, quantity, approved, seller_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1, $14)
         RETURNING id
       `, [title, description, parsedPrice, parsedCatId, phone, phone, wa, location || 'Kampala, Uganda', condition, mainImageFile, mainImageUrl, payment_code, parsedQty, validSellerId]);
       
       const newProdId = res.rows[0].id;
+
       if (images && images.length > 0) {
         for (let i = 0; i < images.length; i++) {
           const item = images[i];
           const fn = typeof item === 'object' ? item.filename : item;
           const dUrl = typeof item === 'object' ? (item.dataUrl || item.filename) : item;
-          await pool.query(`
+          await executePgQuery(`
             INSERT INTO product_images (product_id, image_path, image_url, is_main)
             VALUES ($1, $2, $3, $4)
           `, [newProdId, fn, dUrl, i === 0]);
         }
       }
+
+      // Keep in-memory cache synchronized with the new product
+      memProducts.unshift({
+        id: newProdId,
+        title,
+        description,
+        price: parsedPrice,
+        category_id: parsedCatId,
+        phone,
+        seller_phone: phone,
+        whatsapp_number: wa,
+        has_whatsapp: !!wa,
+        location: location || 'Kampala, Uganda',
+        condition,
+        image: mainImageFile,
+        image_url: mainImageUrl,
+        payment_code,
+        quantity: parsedQty,
+        approved: 1,
+        seller_id: validSellerId,
+        created_at: new Date()
+      });
+
+      return newProdId;
+    } catch (err) {
+      console.error('Failed to create product in PostgreSQL, using in-memory store:', err.message);
+      const newProdId = memNextProdId++;
+      memProducts.unshift({
+        id: newProdId,
+        title,
+        description,
+        price: parsedPrice,
+        category_id: parsedCatId,
+        phone,
+        seller_phone: phone,
+        whatsapp_number: wa,
+        has_whatsapp: !!wa,
+        location: location || 'Kampala, Uganda',
+        condition,
+        image: mainImageFile,
+        image_url: mainImageUrl,
+        payment_code,
+        quantity: parsedQty,
+        approved: 1,
+        seller_id: validSellerId || 2,
+        created_at: new Date()
+      });
+
+      if (images && images.length > 0) {
+        images.forEach((item, index) => {
+          const fn = typeof item === 'object' ? item.filename : item;
+          const dUrl = typeof item === 'object' ? (item.dataUrl || item.filename) : item;
+          memProductImages.push({
+            id: memNextImgId++,
+            product_id: newProdId,
+            image_path: fn,
+            image_url: dUrl,
+            is_main: index === 0 ? 1 : 0
+          });
+        });
+      }
       return newProdId;
     }
-
-    const newProdId = memNextProdId++;
-    memProducts.unshift({
-      id: newProdId,
-      title,
-      description,
-      price: parsedPrice,
-      category_id: parsedCatId,
-      phone,
-      seller_phone: phone,
-      whatsapp_number: wa,
-      has_whatsapp: !!wa,
-      location: location || 'Kampala, Uganda',
-      condition,
-      image: mainImageFile,
-      image_url: mainImageUrl,
-      payment_code,
-      quantity: parsedQty,
-      approved: 1,
-      seller_id: seller_id || 2,
-      created_at: new Date()
-    });
-
-    if (images && images.length > 0) {
-      images.forEach((item, index) => {
-        const fn = typeof item === 'object' ? item.filename : item;
-        const dUrl = typeof item === 'object' ? (item.dataUrl || item.filename) : item;
-        memProductImages.push({
-          id: memNextImgId++,
-          product_id: newProdId,
-          image_path: fn,
-          image_url: dUrl,
-          is_main: index === 0 ? 1 : 0
-        });
-      });
-    }
-
-    return newProdId;
   },
 
   async getAvailableProducts() {
@@ -751,7 +914,34 @@ const db = {
   async getProductsBySeller(sellerId) {
     const sId = parseInt(sellerId, 10);
     if (!sId) return [];
-    return this.getProducts(p => p.seller_id === sId);
+
+    let sellerUser = null;
+    try {
+      sellerUser = await this.findUserById(sId);
+    } catch {}
+
+    const cleanUserPhone = sellerUser && sellerUser.phone ? sellerUser.phone.replace(/[^0-9]/g, '') : '';
+    const cleanUserWa = sellerUser && sellerUser.whatsapp_number ? sellerUser.whatsapp_number.replace(/[^0-9]/g, '') : '';
+
+    return this.getProducts(p => {
+      // 1. Direct seller_id match
+      if (p.seller_id && parseInt(p.seller_id, 10) === sId) return true;
+      // 2. Phone match against registered seller phone
+      if (cleanUserPhone && cleanUserPhone.length >= 9) {
+        const pPhone = (p.phone || p.seller_phone || '').replace(/[^0-9]/g, '');
+        if (pPhone && (pPhone.endsWith(cleanUserPhone.slice(-9)) || cleanUserPhone.endsWith(pPhone.slice(-9)))) {
+          return true;
+        }
+      }
+      // 3. WhatsApp number match
+      if (cleanUserWa && cleanUserWa.length >= 9 && cleanUserWa !== '256763480495') {
+        const pWa = (p.whatsapp_number || '').replace(/[^0-9]/g, '');
+        if (pWa && (pWa.endsWith(cleanUserWa.slice(-9)) || cleanUserWa.endsWith(pWa.slice(-9)))) {
+          return true;
+        }
+      }
+      return false;
+    });
   },
 
   async quickUpdateProduct(productId, { title, price, quantity, approved }) {

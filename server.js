@@ -276,7 +276,7 @@ app.get(['/', '/index.php', '/index'], async (req, res) => {
       delete req.session.justRegistered;
     }
 
-    let filtered = await db.getProducts(p => p.approved === 1 && p.quantity > 0);
+    let filtered = await db.getProducts(p => p.approved === 1 || p.approved === true || p.approved == null);
 
     if (search) {
       filtered = filtered.filter(p =>
@@ -343,7 +343,7 @@ app.get(['/category.php', '/category'], async (req, res) => {
     const search = (req.query.search || '').trim().toLowerCase();
     const sort = req.query.sort || 'newest';
 
-    let filtered = await db.getProducts(p => p.category_id === id && p.approved === 1 && p.quantity > 0);
+    let filtered = await db.getProducts(p => p.category_id === id && (p.approved === 1 || p.approved === true || p.approved == null));
 
     if (search) {
       filtered = filtered.filter(p =>
