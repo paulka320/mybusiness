@@ -10,21 +10,21 @@
 <body style="background: #f8fafc; color: #0f172a;">
 <%- include('header') %>
 
-<main class="section" style="max-width: 1280px; padding: 24px 20px;">
+<main class="admin-main-container">
     <!-- Admin Top Header Banner -->
-    <div class="admin-header-banner" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #ffffff; padding: 24px; border-radius: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);">
-        <div>
-            <div style="display: flex; align-items: center; gap: 10px;">
+    <div class="admin-header-banner">
+        <div class="admin-header-info">
+            <div class="admin-header-title-row">
                 <span style="font-size: 28px;">⚡</span>
-                <h1 style="margin: 0; font-size: 1.75rem; font-weight: 800; letter-spacing: -0.5px; color: #ffffff;">EasyMarket Admin Command Suite</h1>
+                <h1 class="admin-header-title">EasyMarket Admin Command Suite</h1>
             </div>
-            <p style="margin: 6px 0 0; color: #94a3b8; font-size: 14px;">
+            <p class="admin-header-subtitle">
                 Live inventory tracking, financial payouts, database health monitoring & multi-device sync.
             </p>
         </div>
-        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-            <a href="/upload" class="btn-primary" style="padding: 10px 18px; font-size: 13px; font-weight: 600; text-decoration: none;">➕ Add New Product</a>
-            <a href="/logout" id="admin-page-logout-btn" class="nav-logout-btn" style="padding: 10px 18px; font-size: 13px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600;">
+        <div class="admin-header-actions">
+            <a href="/upload" class="btn-primary admin-action-btn">➕ Add New Product</a>
+            <a href="/logout" id="admin-page-logout-btn" class="nav-logout-btn admin-logout-btn">
                 🚪 Logout Admin
             </a>
         </div>
@@ -32,51 +32,51 @@
 
     <!-- Admin Notification / Flash Feedback Alert -->
     <% if (locals.adminFeedback) { %>
-        <div style="background: #f0fdf4; border: 1px solid #86efac; color: #166534; padding: 14px 18px; border-radius: 12px; margin-bottom: 20px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.03);">
+        <div class="admin-alert-banner">
             <span style="font-size: 18px;">📢</span>
             <div><%= locals.adminFeedback %></div>
         </div>
     <% } %>
 
     <!-- Navigation Tabs -->
-    <div class="admin-tab-nav" id="admin-tabs" style="display: flex; gap: 8px; border-bottom: 2px solid #e2e8f0; margin-bottom: 24px; overflow-x: auto; padding-bottom: 8px;">
-        <a href="/admin_dashboard?tab=overview" class="admin-tab-btn <%= (!locals.activeTab || activeTab === 'overview') ? 'active' : '' %>" style="text-decoration: none; padding: 10px 16px; font-weight: 600; font-size: 14px; border-radius: 8px; color: <%= (!locals.activeTab || activeTab === 'overview') ? '#2563eb' : '#64748b' %>; background: <%= (!locals.activeTab || activeTab === 'overview') ? '#eff6ff' : 'transparent' %>;">
+    <div class="admin-tab-nav" id="admin-tabs">
+        <a href="/admin_dashboard?tab=overview" class="admin-tab-btn <%= (!locals.activeTab || activeTab === 'overview') ? 'active' : '' %>">
             📈 Overview & Financials
         </a>
-        <a href="/admin_dashboard?tab=inventory" class="admin-tab-btn <%= (activeTab === 'inventory') ? 'active' : '' %>" style="text-decoration: none; padding: 10px 16px; font-weight: 600; font-size: 14px; border-radius: 8px; color: <%= (activeTab === 'inventory') ? '#2563eb' : '#64748b' %>; background: <%= (activeTab === 'inventory') ? '#eff6ff' : 'transparent' %>; display: flex; align-items: center; gap: 6px;">
+        <a href="/admin_dashboard?tab=inventory" class="admin-tab-btn <%= (activeTab === 'inventory') ? 'active' : '' %>">
             📦 Inventory & Catalog
             <% if (stats.inventory.lowStock.length > 0) { %>
-                <span style="background: #f97316; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px;"><%= stats.inventory.lowStock.length %> low</span>
+                <span class="tab-badge-orange"><%= stats.inventory.lowStock.length %> low</span>
             <% } %>
         </a>
-        <a href="/admin_dashboard?tab=orders" class="admin-tab-btn <%= (activeTab === 'orders') ? 'active' : '' %>" style="text-decoration: none; padding: 10px 16px; font-weight: 600; font-size: 14px; border-radius: 8px; color: <%= (activeTab === 'orders') ? '#2563eb' : '#64748b' %>; background: <%= (activeTab === 'orders') ? '#eff6ff' : 'transparent' %>; display: flex; align-items: center; gap: 6px;">
+        <a href="/admin_dashboard?tab=orders" class="admin-tab-btn <%= (activeTab === 'orders') ? 'active' : '' %>">
             🚚 Orders & Fulfillment
             <% if (stats.fulfillmentQueue.pending > 0) { %>
-                <span style="background: #eab308; color: #713f12; padding: 2px 7px; border-radius: 10px; font-size: 11px;"><%= stats.fulfillmentQueue.pending %> pending</span>
+                <span class="tab-badge-yellow"><%= stats.fulfillmentQueue.pending %> pending</span>
             <% } %>
         </a>
-        <a href="/admin_dashboard?tab=customers" class="admin-tab-btn <%= (activeTab === 'customers') ? 'active' : '' %>" style="text-decoration: none; padding: 10px 16px; font-weight: 600; font-size: 14px; border-radius: 8px; color: <%= (activeTab === 'customers') ? '#2563eb' : '#64748b' %>; background: <%= (activeTab === 'customers') ? '#eff6ff' : 'transparent' %>; display: flex; align-items: center; gap: 6px;">
+        <a href="/admin_dashboard?tab=customers" class="admin-tab-btn <%= (activeTab === 'customers') ? 'active' : '' %>">
             👥 Customers & Tickets
             <% if (stats.customerInsights.openTicketsCount > 0) { %>
-                <span style="background: #ea580c; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px;"><%= stats.customerInsights.openTicketsCount %></span>
+                <span class="tab-badge-orange"><%= stats.customerInsights.openTicketsCount %></span>
             <% } %>
         </a>
-        <a href="/admin_dashboard?tab=messages" class="admin-tab-btn <%= (activeTab === 'messages') ? 'active' : '' %>" style="text-decoration: none; padding: 10px 16px; font-weight: 600; font-size: 14px; border-radius: 8px; color: <%= (activeTab === 'messages') ? '#2563eb' : '#64748b' %>; background: <%= (activeTab === 'messages') ? '#eff6ff' : 'transparent' %>; display: flex; align-items: center; gap: 6px;">
-            💬 Customer In-App Messages
+        <a href="/admin_dashboard?tab=messages" class="admin-tab-btn <%= (activeTab === 'messages') ? 'active' : '' %>">
+            💬 Customer Messages
             <% if (locals.customerThreads && customerThreads.some(t => t.unreadCount > 0)) { %>
                 <% const totalUnread = customerThreads.reduce((sum, t) => sum + t.unreadCount, 0); %>
-                <span style="background: #2563eb; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px;"><%= totalUnread %> new</span>
+                <span class="tab-badge-blue"><%= totalUnread %> new</span>
             <% } %>
         </a>
-        <a href="/admin_dashboard?tab=marketing" class="admin-tab-btn <%= (activeTab === 'marketing') ? 'active' : '' %>" style="text-decoration: none; padding: 10px 16px; font-weight: 600; font-size: 14px; border-radius: 8px; color: <%= (activeTab === 'marketing') ? '#2563eb' : '#64748b' %>; background: <%= (activeTab === 'marketing') ? '#eff6ff' : 'transparent' %>;">
+        <a href="/admin_dashboard?tab=marketing" class="admin-tab-btn <%= (activeTab === 'marketing') ? 'active' : '' %>">
             📢 Campaigns & Promo
         </a>
-        <a href="/admin_dashboard?tab=database" class="admin-tab-btn <%= (activeTab === 'database') ? 'active' : '' %>" style="text-decoration: none; padding: 10px 16px; font-weight: 600; font-size: 14px; border-radius: 8px; color: <%= (activeTab === 'database') ? '#2563eb' : '#64748b' %>; background: <%= (activeTab === 'database') ? '#eff6ff' : 'transparent' %>; display: flex; align-items: center; gap: 6px;">
+        <a href="/admin_dashboard?tab=database" class="admin-tab-btn <%= (activeTab === 'database') ? 'active' : '' %>">
             ⚡ Supabase & Database
             <% if (locals.dbDiagnostics && dbDiagnostics.isConnected) { %>
-                <span style="background: #22c55e; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px;">🟢 Connected</span>
+                <span class="tab-badge-green">🟢 Connected</span>
             <% } else { %>
-                <span style="background: #f59e0b; color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px;">🟡 Action Needed</span>
+                <span class="tab-badge-yellow">🟡 Action Needed</span>
             <% } %>
         </a>
     </div>
@@ -86,86 +86,86 @@
     <section class="admin-section-block">
         
         <!-- FINANCIAL FORECAST & OWNER PAYOUT CARDS -->
-        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid #f1f5f9; padding-bottom: 14px;">
+        <div class="admin-card">
+            <div class="admin-card-header-flex">
                 <div>
-                    <h2 style="margin: 0; font-size: 1.25rem; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                    <h2 class="admin-card-heading">
                         💰 Financial Valuation & Owner Payout Forecast
                     </h2>
-                    <p style="margin: 4px 0 0; font-size: 13px; color: #64748b;">
+                    <p class="admin-card-subheading">
                         Calculated from all active products uploaded across the entire marketplace catalog.
                     </p>
                 </div>
                 
                 <!-- Commission Rate Adjuster Form -->
-                <form method="POST" action="/admin_dashboard/commission-rate" style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 8px 14px; border-radius: 10px; border: 1px solid #cbd5e1;">
-                    <label style="font-size: 12px; font-weight: 700; color: #334155; margin: 0;">Owner Cut / Commission Rate:</label>
+                <form method="POST" action="/admin_dashboard/commission-rate" class="admin-commission-form">
+                    <label style="font-size: 12px; font-weight: 700; color: #334155; margin: 0;">Owner Cut / Rate:</label>
                     <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="number" name="commission_rate" min="0" max="100" step="0.5" value="<%= stats.financialForecast.ownerCommissionPercentage %>" style="width: 60px; padding: 4px 8px; font-size: 13px; font-weight: 700; border-radius: 6px; border: 1px solid #94a3b8; text-align: center;" required>
+                        <input type="number" name="commission_rate" min="0" max="100" step="0.5" value="<%= stats.financialForecast.ownerCommissionPercentage %>" style="width: 55px; padding: 5px 8px; font-size: 13px; font-weight: 700; border-radius: 6px; border: 1px solid #94a3b8; text-align: center;" required>
                         <span style="font-weight: 700; color: #334155;">%</span>
                     </div>
-                    <button type="submit" class="btn-sm-action" style="background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">
+                    <button type="submit" class="btn-sm-action" style="background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; min-height: 36px;">
                         Set Rate
                     </button>
                 </form>
             </div>
 
             <!-- Financial Metrics Grid -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;">
+            <div class="admin-metrics-grid">
                 <!-- Total Catalog Revenue Expected -->
-                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 18px;">
-                    <div style="font-size: 12px; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
+                <div class="admin-stat-box green-box">
+                    <div class="admin-stat-label green-label">
                         💵 Total Expected Catalog Revenue
                     </div>
-                    <div style="font-size: 1.6rem; font-weight: 800; color: #15803d; letter-spacing: -0.5px;">
+                    <div class="admin-stat-val green-val">
                         UGX <%= Number(stats.financialForecast.totalExpectedCatalogRevenue).toLocaleString() %>
                     </div>
-                    <div style="font-size: 12px; color: #166534; margin-top: 6px;">
+                    <div class="admin-stat-sub green-sub">
                         Sum value of all <%= stats.inventory.totalStockUnits %> inventory units
                     </div>
                 </div>
 
                 <!-- Owner Total Payout (Admin Cut to Phone) -->
-                <div style="background: #eff6ff; border: 2px solid #3b82f6; border-radius: 12px; padding: 18px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);">
+                <div class="admin-stat-box blue-box-highlight">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <span style="font-size: 12px; font-weight: 700; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <span class="admin-stat-label blue-label">
                             ⭐ Owner Cut (To Send to My Number)
                         </span>
                         <span style="background: #2563eb; color: white; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 6px;">
                             <%= stats.financialForecast.ownerCommissionPercentage %>% Share
                         </span>
                     </div>
-                    <div style="font-size: 1.6rem; font-weight: 800; color: #1d4ed8; letter-spacing: -0.5px;">
+                    <div class="admin-stat-val blue-val">
                         UGX <%= Number(stats.financialForecast.ownerShareAmount).toLocaleString() %>
                     </div>
-                    <div style="font-size: 12px; color: #1e40af; margin-top: 6px; display: flex; align-items: center; gap: 6px;">
+                    <div class="admin-stat-sub blue-sub" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                         <span>📱 Payout Number:</span>
                         <strong><%= stats.financialForecast.ownerPhoneNumber %></strong>
                     </div>
                 </div>
 
                 <!-- Sellers Net Share -->
-                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px;">
-                    <div style="font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
+                <div class="admin-stat-box gray-box">
+                    <div class="admin-stat-label gray-label">
                         📦 Net Sellers Revenue
                     </div>
-                    <div style="font-size: 1.6rem; font-weight: 800; color: #334155; letter-spacing: -0.5px;">
+                    <div class="admin-stat-val gray-val">
                         UGX <%= Number(stats.financialForecast.sellersShareAmount).toLocaleString() %>
                     </div>
-                    <div style="font-size: 12px; color: #64748b; margin-top: 6px;">
+                    <div class="admin-stat-sub gray-sub">
                         Disbursed to sellers upon delivery confirmation
                     </div>
                 </div>
 
                 <!-- Actual Delivered Sales Revenue -->
-                <div style="background: #fefce8; border: 1px solid #fef08a; border-radius: 12px; padding: 18px;">
-                    <div style="font-size: 12px; font-weight: 700; color: #854d0e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
+                <div class="admin-stat-box yellow-box">
+                    <div class="admin-stat-label yellow-label">
                         🚚 Realized Gross Sales
                     </div>
-                    <div style="font-size: 1.6rem; font-weight: 800; color: #a16207; letter-spacing: -0.5px;">
+                    <div class="admin-stat-val yellow-val">
                         UGX <%= Number(stats.core.totalGrossSales).toLocaleString() %>
                     </div>
-                    <div style="font-size: 12px; color: #854d0e; margin-top: 6px;">
+                    <div class="admin-stat-sub yellow-sub">
                         From <%= stats.core.totalOrders %> placed customer orders
                     </div>
                 </div>
@@ -173,7 +173,7 @@
         </div>
 
         <!-- 2-COLUMN GRID: LIVE DATABASE HEALTH & INVENTORY HEALTH METRICS -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; margin-bottom: 24px;">
+        <div class="admin-2col-grid">
             
             <!-- LIVE DATABASE HEALTH MONITOR & SYNC SUITE -->
             <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
@@ -306,7 +306,7 @@
     <section class="admin-section-block">
         
         <!-- Stock Alarms & Product Availability Stats Grid -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <div class="admin-metrics-grid" style="margin-bottom: 24px;">
             <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 16px;">
                 <div style="font-size: 12px; font-weight: 700; color: #1e40af; text-transform: uppercase;">🔵 Total Listed Catalog</div>
                 <div style="font-size: 1.6rem; font-weight: 800; color: #1d4ed8; margin: 4px 0;"><%= locals.allProductsCount || (locals.products ? locals.products.length : 0) %> Products</div>
@@ -582,7 +582,7 @@
     <% if (activeTab === 'orders') { %>
     <section class="admin-section-block">
         <!-- Fulfillment Pipeline Summary -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 24px;">
+        <div class="admin-pipeline-grid">
             <div class="status-pill-card status-pending" style="background: #fefce8; border: 1px solid #fef08a; padding: 14px; border-radius: 10px;">
                 <span class="status-count" style="font-size: 1.5rem; font-weight: 800; color: #a16207;"><%= stats.fulfillmentQueue.pending %></span>
                 <span class="status-label" style="font-size: 12px; font-weight: 700; color: #854d0e; display: block;">Pending</span>
@@ -744,7 +744,7 @@
     <!-- 4. CUSTOMER INSIGHTS TAB -->
     <% if (activeTab === 'customers') { %>
     <section class="admin-section-block">
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <div class="admin-metrics-grid" style="margin-bottom: 24px;">
             <div class="metric-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px;">
                 <div class="metric-label" style="font-size: 12px; color: #64748b; font-weight: 700;">New First-Time Buyers</div>
                 <div class="metric-val" style="color: #2563eb; font-size: 1.6rem; font-weight: 800; margin: 4px 0;"><%= stats.customerInsights.newBuyers %></div>
@@ -762,7 +762,7 @@
             </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px;">
+        <div class="admin-2col-grid">
             <!-- Support Tickets Queue -->
             <div class="admin-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
                 <h3 class="admin-card-title" style="margin: 0 0 16px; font-size: 1.15rem; font-weight: 800; color: #0f172a;">
@@ -845,7 +845,7 @@
     <!-- 5. MARKETING AND PROMOTIONS TAB -->
     <% if (activeTab === 'marketing') { %>
     <section class="admin-section-block">
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px;">
+        <div class="admin-2col-grid">
             <!-- Active Campaigns -->
             <div class="admin-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
                 <h3 class="admin-card-title" style="margin: 0 0 16px; font-size: 1.15rem; font-weight: 800; color: #0f172a;">
@@ -1106,7 +1106,7 @@
             <% } %>
 
             <!-- Detailed Diagnostics Metric Grid -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px;">
+            <div class="admin-metrics-grid" style="margin-bottom: 20px;">
                 <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;">
                     <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Supabase Host</div>
                     <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 4px; word-break: break-all;">
@@ -1155,7 +1155,7 @@
                                     <p style="margin: 4px 0 0 0;">
                                         👉 <strong>Fix:</strong> Enter your Supabase database password in the form below and click <strong>"Connect & Sync to Supabase"</strong>. Once connected, all your uploaded products will instantly write to the Supabase database.
                                     </p>
-                                <% } %>
+                                    <% } %>
                             </div>
                         </div>
                     </div>
@@ -1165,7 +1165,7 @@
         </div>
 
         <!-- 2-COLUMN SECTION: CONNECTIVITY SETTINGS & STEP-BY-STEP SUPABASE GUIDE -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 24px;">
+        <div class="admin-2col-grid" style="margin-bottom: 24px;">
             
             <!-- FORM 1: Connect / Update Supabase Credentials -->
             <div style="background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
