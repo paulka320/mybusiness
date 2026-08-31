@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg-Top/Detail View" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="screen-Top/Detail View" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="15" flood-color="#0284c7" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <rect width="600" height="600" rx="24" fill="url(#bg-Top/Detail View)"/>
+  
+  <!-- Subtle Grid pattern -->
+  <g opacity="0.07" stroke="#ffffff" stroke-width="1">
+    <line x1="50" y1="0" x2="50" y2="600" />
+    <line x1="150" y1="0" x2="150" y2="600" />
+    <line x1="250" y1="0" x2="250" y2="600" />
+    <line x1="350" y1="0" x2="350" y2="600" />
+    <line x1="450" y1="0" x2="450" y2="600" />
+    <line x1="550" y1="0" x2="550" y2="600" />
+    <line x1="0" y1="100" x2="600" y2="100" />
+    <line x1="0" y1="200" x2="600" y2="200" />
+    <line x1="0" y1="300" x2="600" y2="300" />
+    <line x1="0" y1="400" x2="600" y2="400" />
+    <line x1="0" y1="500" x2="600" y2="500" />
+  </g>
+
+  <!-- Product Body Graphic -->
+  <g transform="translate(150, 80)" filter="url(#glow)">
+    <rect x="0" y="0" width="300" height="440" rx="36" fill="#334155" stroke="#64748b" stroke-width="4"/>
+    <rect x="12" y="12" width="276" height="416" rx="28" fill="#020617"/>
+    
+    <!-- Screen Content / Camera Layout according to angle -->
+    
+
+    
+
+    
+
+    
+
+    
+      <rect x="30" y="80" width="240" height="280" rx="20" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>
+      <circle cx="150" cy="180" r="40" fill="#0284c7" opacity="0.4"/>
+      <path d="M130 180 L145 195 L175 165" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="150" y="260" fill="#ffffff" font-family="system-ui, sans-serif" font-size="16" font-weight="bold" text-anchor="middle">100% Original Verified</text>
+      <text x="150" y="290" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="12" text-anchor="middle">Clean IMEI · Sealed Box</text>
+    
+  </g>
+
+  <!-- Angle Tag Overlay -->
+  <rect x="24" y="530" width="220" height="42" rx="10" fill="rgba(0,0,0,0.7)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+  <text x="38" y="556" fill="#38bdf8" font-family="system-ui, sans-serif" font-size="14" font-weight="700">📷 Top/Detail View</text>
+  
+  <rect x="380" y="530" width="196" height="42" rx="10" fill="#16a34a"/>
+  <text x="478" y="556" fill="#ffffff" font-family="system-ui, sans-serif" font-size="13" font-weight="700" text-anchor="middle">UGX 40,000 Verified</text>
+</svg>

@@ -34,7 +34,7 @@
                 
                 <div class="gallery-viewport">
                     <% galleryList.forEach(function(img, idx) { %>
-                        <% var pImg = img.image_path && (img.image_path.startsWith('http') || img.image_path.startsWith('/') || img.image_path.startsWith('data:')) ? img.image_path : ('/uploads/' + (img.image_path || 'phone-front.svg')); %>
+                        <% var pImg = img.image_url || img.image_path || '/phone-front.svg'; %>
                         <img 
                             src="<%= pImg %>" 
                             onerror="this.onerror=null;this.src='/phone-front.svg';" 
@@ -60,7 +60,7 @@
             <% if (galleryList.length > 1) { %>
                 <div class="gallery-thumbnails-strip" id="gallery-thumbnails-strip">
                     <% galleryList.forEach(function(img, idx) { %>
-                        <% var pImg = img.image_path && (img.image_path.startsWith('http') || img.image_path.startsWith('/') || img.image_path.startsWith('data:')) ? img.image_path : ('/uploads/' + (img.image_path || 'phone-front.svg')); %>
+                        <% var pImg = img.image_url || img.image_path || '/phone-front.svg'; %>
                         <button 
                             type="button" 
                             class="gallery-thumb-btn <%= idx === 0 ? 'active' : '' %>" 
@@ -212,7 +212,7 @@
                     <article class="product-card">
                         <a class="product-link" href="product.php?id=<%= row.id %>">
                             <div class="product-image">
-                                <img src="<%= row.image && (row.image.startsWith('http') || row.image.startsWith('data:') || row.image.startsWith('/')) ? row.image : ('/uploads/' + (row.image || 'phone-front.svg')) %>" onerror="this.onerror=null;this.src='/phone-front.svg';" alt="<%= row.title %>">
+                                <img src="<%= row.image %>" onerror="this.onerror=null;this.src='/phone-front.svg';" alt="<%= row.title %>">
                             </div>
                             <div class="product-body">
                                 <h3><%= row.title %></h3>

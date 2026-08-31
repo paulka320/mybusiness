@@ -610,6 +610,26 @@ async function initDatabase() {
   }
 }
 
+function formatProductRow(r) {
+  if (!r) return null;
+  const rawImg = r.image_url || r.image;
+  let finalImage = 'phone-front.svg';
+  if (rawImg && (rawImg.startsWith('data:') || rawImg.startsWith('http') || rawImg.startsWith('/'))) {
+    finalImage = rawImg;
+  } else if (rawImg) {
+    finalImage = `/uploads/${rawImg}`;
+  }
+  return {
+    ...r,
+    image: finalImage,
+    image_url: finalImage,
+    price: isNaN(parseFloat(r.price)) ? 0 : parseFloat(r.price),
+    quantity: isNaN(parseInt(r.quantity, 10)) ? 1 : Math.max(0, parseInt(r.quantity, 10)),
+    approved: (r.approved === true || r.approved === 1 || r.approved === '1' || r.approved == null || r.approved === 'true') ? 1 : 0,
+    category_name: r.category_name || 'General'
+  };
+}
+
 // Format Uganda WhatsApp phone number cleanly (e.g. "+256 701 234567" or "0763480495" -> "256763480495")
 function sanitizeWhatsAppNumber(phone) {
   if (!phone) return '256763480495';
@@ -657,13 +677,7 @@ const db = {
         LEFT JOIN users u ON p.seller_id = u.id
         ORDER BY p.id DESC
       `);
-      let list = res.rows.map(r => ({
-        ...r,
-        price: isNaN(parseFloat(r.price)) ? 0 : parseFloat(r.price),
-        quantity: isNaN(parseInt(r.quantity, 10)) ? 1 : Math.max(0, parseInt(r.quantity, 10)),
-        approved: (r.approved === true || r.approved === 1 || r.approved === '1' || r.approved == null || r.approved === 'true') ? 1 : 0,
-        category_name: r.category_name || 'General'
-      }));
+      let list = res.rows.map(formatProductRow);
       // Keep memory cache updated with real database records
       memProducts = [...list];
 
@@ -675,13 +689,10 @@ const db = {
       console.warn('Using cached products due to fetch error:', err.message);
       let list = memProducts.map(p => {
         const cat = memCategories.find(c => c.id === p.category_id);
-        return {
+        return formatProductRow({
           ...p,
-          price: isNaN(parseFloat(p.price)) ? 0 : parseFloat(p.price),
-          quantity: isNaN(parseInt(p.quantity, 10)) ? 1 : Math.max(0, parseInt(p.quantity, 10)),
-          approved: (p.approved === true || p.approved === 1 || p.approved === '1' || p.approved == null || p.approved === 'true') ? 1 : 0,
           category_name: cat ? cat.name : (p.category_name || 'General')
-        };
+        });
       });
       if (filterFn) {
         list = list.filter(filterFn);
@@ -706,25 +717,15 @@ const db = {
         WHERE p.id = $1
       `, [pId]);
       if (res.rows.length === 0) return null;
-      const row = res.rows[0];
-      return {
-        ...row,
-        price: isNaN(parseFloat(row.price)) ? 0 : parseFloat(row.price),
-        quantity: isNaN(parseInt(row.quantity, 10)) ? 1 : Math.max(0, parseInt(row.quantity, 10)),
-        approved: (row.approved === true || row.approved === 1 || row.approved === '1' || row.approved == null || row.approved === 'true') ? 1 : 0,
-        category_name: row.category_name || 'General'
-      };
+      return formatProductRow(res.rows[0]);
     } catch (err) {
       const p = memProducts.find(item => item.id === pId);
       if (!p) return null;
       const cat = memCategories.find(c => c.id === p.category_id);
-      return {
+      return formatProductRow({
         ...p,
-        price: isNaN(parseFloat(p.price)) ? 0 : parseFloat(p.price),
-        quantity: isNaN(parseInt(p.quantity, 10)) ? 1 : Math.max(0, parseInt(p.quantity, 10)),
-        approved: (p.approved === true || p.approved === 1 || p.approved === '1' || p.approved == null || p.approved === 'true') ? 1 : 0,
         category_name: cat ? cat.name : (p.category_name || 'General')
-      };
+      });
     }
   },
 
@@ -732,22 +733,63 @@ const db = {
     const pId = parseInt(productId, 10);
     if (!pId) return [];
     try {
-      const res = await executePgQuery('SELECT id, product_id, COALESCE(image_url, image_path) AS image_path, COALESCE(image_url, image_path) AS image_url, is_main FROM product_images WHERE product_id = $1 ORDER BY is_main DESC, id ASC', [pId]);
+      const res = await executePgQuery('SELECT id, product_id, image_path, image_url, is_main FROM product_images WHERE product_id = $1 ORDER BY is_main DESC, id ASC', [pId]);
       if (res.rows.length > 0) {
-        return res.rows;
+        return res.rows.map(img => {
+          const raw = img.image_url || img.image_path;
+          let formatted = '/phone-front.svg';
+          if (raw && (raw.startsWith('data:') || raw.startsWith('http') || raw.startsWith('/'))) {
+            formatted = raw;
+          } else if (raw) {
+            formatted = `/uploads/${raw}`;
+          }
+          return {
+            ...img,
+            image_path: formatted,
+            image_url: formatted
+          };
+        });
       }
-      const prodRes = await executePgQuery('SELECT COALESCE(image_url, image) AS image FROM products WHERE id = $1', [pId]);
-      if (prodRes.rows.length > 0 && prodRes.rows[0].image) {
-        return [{ id: 0, product_id: pId, image_path: prodRes.rows[0].image, image_url: prodRes.rows[0].image, is_main: 1 }];
+      const prodRes = await executePgQuery('SELECT image_url, image FROM products WHERE id = $1', [pId]);
+      if (prodRes.rows.length > 0) {
+        const raw = prodRes.rows[0].image_url || prodRes.rows[0].image;
+        let formatted = '/phone-front.svg';
+        if (raw && (raw.startsWith('data:') || raw.startsWith('http') || raw.startsWith('/'))) {
+          formatted = raw;
+        } else if (raw) {
+          formatted = `/uploads/${raw}`;
+        }
+        return [{ id: 0, product_id: pId, image_path: formatted, image_url: formatted, is_main: 1 }];
       }
       return [];
     } catch (err) {
       const memList = memProductImages.filter(img => img.product_id === pId);
-      if (memList.length > 0) return memList;
+      if (memList.length > 0) {
+        return memList.map(img => {
+          const raw = img.image_url || img.image_path;
+          let formatted = '/phone-front.svg';
+          if (raw && (raw.startsWith('data:') || raw.startsWith('http') || raw.startsWith('/'))) {
+            formatted = raw;
+          } else if (raw) {
+            formatted = `/uploads/${raw}`;
+          }
+          return {
+            ...img,
+            image_path: formatted,
+            image_url: formatted
+          };
+        });
+      }
       const p = memProducts.find(item => item.id === pId);
       if (p && (p.image || p.image_url)) {
-        const img = p.image_url || p.image;
-        return [{ id: 0, product_id: pId, image_path: img, image_url: img, is_main: 1 }];
+        const raw = p.image_url || p.image;
+        let formatted = '/phone-front.svg';
+        if (raw && (raw.startsWith('data:') || raw.startsWith('http') || raw.startsWith('/'))) {
+          formatted = raw;
+        } else if (raw) {
+          formatted = `/uploads/${raw}`;
+        }
+        return [{ id: 0, product_id: pId, image_path: formatted, image_url: formatted, is_main: 1 }];
       }
       return [];
     }
@@ -758,17 +800,18 @@ const db = {
     const pId = parseInt(currentId, 10);
     try {
       const res = await executePgQuery(`
-        SELECT p.*, COALESCE(p.image_url, p.image) as image, COALESCE(p.image_url, p.image) as image_url, c.name as category_name
+        SELECT p.*, c.name as category_name
         FROM products p 
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.category_id = $1 AND p.id != $2 AND (p.approved = 1 OR p.approved IS NULL OR p.approved = true)
         ORDER BY p.id DESC LIMIT $3
       `, [cId, pId, limit]);
-      return res.rows.map(r => ({ ...r, price: parseFloat(r.price) }));
+      return res.rows.map(formatProductRow);
     } catch (err) {
       return memProducts
         .filter(p => p.category_id === cId && p.id !== pId && (p.approved === 1 || p.approved == null))
-        .slice(0, limit);
+        .slice(0, limit)
+        .map(formatProductRow);
     }
   },
 
@@ -1382,19 +1425,17 @@ const db = {
   async getImageDataByFilename(filename) {
     if (!filename) return null;
     const cleanFn = filename.replace('/uploads/', '').replace('uploads/', '');
-    if (isConnectedToPostgres && pool) {
-      try {
-        const imgRes = await pool.query('SELECT image_url FROM product_images WHERE image_path = $1 OR image_url LIKE $2 LIMIT 1', [cleanFn, `%${cleanFn}%`]);
-        if (imgRes.rows.length > 0 && imgRes.rows[0].image_url && imgRes.rows[0].image_url.startsWith('data:')) {
-          return imgRes.rows[0].image_url;
-        }
-        const prodRes = await pool.query('SELECT image_url FROM products WHERE image = $1 OR image_url LIKE $2 LIMIT 1', [cleanFn, `%${cleanFn}%`]);
-        if (prodRes.rows.length > 0 && prodRes.rows[0].image_url && prodRes.rows[0].image_url.startsWith('data:')) {
-          return prodRes.rows[0].image_url;
-        }
-      } catch (err) {
-        console.warn('Error fetching image from DB:', err.message);
+    try {
+      const imgRes = await executePgQuery('SELECT image_url FROM product_images WHERE image_path = $1 OR image_url LIKE $2 LIMIT 1', [cleanFn, `%${cleanFn}%`]);
+      if (imgRes.rows.length > 0 && imgRes.rows[0].image_url && imgRes.rows[0].image_url.startsWith('data:')) {
+        return imgRes.rows[0].image_url;
       }
+      const prodRes = await executePgQuery('SELECT image_url FROM products WHERE image = $1 OR image_url LIKE $2 LIMIT 1', [cleanFn, `%${cleanFn}%`]);
+      if (prodRes.rows.length > 0 && prodRes.rows[0].image_url && prodRes.rows[0].image_url.startsWith('data:')) {
+        return prodRes.rows[0].image_url;
+      }
+    } catch (err) {
+      console.warn('Error fetching image from DB:', err.message);
     }
     const memImg = memProductImages.find(i => i.image_path === cleanFn || (i.image_url && i.image_url.includes(cleanFn)));
     if (memImg && memImg.image_url && memImg.image_url.startsWith('data:')) return memImg.image_url;

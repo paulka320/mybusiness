@@ -27,7 +27,7 @@
     <form class="product-form" method="POST" action="login.php">
         <input type="hidden" name="return" value="<%= locals.returnTo || locals.returnUrl || '' %>">
         <label for="login-email">Email or Username</label>
-        <input type="text" id="login-email" name="email" placeholder="you@example.com or EasyMarket@admin123easymarket" value="<%= locals.email || '' %>" required autocomplete="username">
+        <input type="text" id="login-email" name="email" placeholder="you@example.com" value="<%= locals.email || '' %>" required autocomplete="username">
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
             <label for="login-password" style="margin: 0;">Password</label>
