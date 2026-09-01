@@ -95,13 +95,13 @@
 
 <script>
 window.EASY_MARKET_USER = {
-    id: <%= (locals.user && locals.user.id) ? JSON.stringify(locals.user.id) : 'null' %>,
-    name: <%= (locals.user && locals.user.name) ? JSON.stringify(locals.user.name) : '""' %>,
-    phone: <%= (locals.user && (locals.user.whatsapp_number || locals.user.phone)) ? JSON.stringify(locals.user.whatsapp_number || locals.user.phone) : '""' %>,
-    whatsapp_number: <%= (locals.user && (locals.user.whatsapp_number || locals.user.phone)) ? JSON.stringify(locals.user.whatsapp_number || locals.user.phone) : '""' %>
+    id: <%- (locals.user && locals.user.id) ? JSON.stringify(locals.user.id) : 'null' %>,
+    name: <%- (locals.user && locals.user.name) ? JSON.stringify(locals.user.name) : '""' %>,
+    phone: <%- (locals.user && (locals.user.whatsapp_number || locals.user.phone)) ? JSON.stringify(locals.user.whatsapp_number || locals.user.phone) : '""' %>,
+    whatsapp_number: <%- (locals.user && (locals.user.whatsapp_number || locals.user.phone)) ? JSON.stringify(locals.user.whatsapp_number || locals.user.phone) : '""' %>
 };
 window.SYSTEM_WHATSAPP_NUMBER = '256763480495';
-if (window.EASY_MARKET_USER.whatsapp_number) {
+if (window.EASY_MARKET_USER && window.EASY_MARKET_USER.whatsapp_number) {
     try {
         localStorage.setItem('user_whatsapp', window.EASY_MARKET_USER.whatsapp_number);
         if (window.EASY_MARKET_USER.name) localStorage.setItem('user_name', window.EASY_MARKET_USER.name);
