@@ -95,12 +95,15 @@
             </label>
         </div>
 
-        <button type="submit" id="register-submit-btn" class="btn-primary" style="width: 100%;">Create Account & Accept Terms</button>
+        <button type="submit" id="register-submit-btn" class="btn-primary" style="width: 100%; padding: 13px; font-size: 15px; font-weight: 700;">Create Account & Accept Terms</button>
     </form>
 
-    <p style="text-align: center; margin-top: 20px; color: #64748b;">
-        Already registered? <a href="login.php" style="color: #ff5e62; font-weight: 600;">Sign in to your account</a>
-    </p>
+    <div class="register-login-card" style="margin-top: 24px; padding: 18px 20px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+        <span style="font-size: 13.5px; color: #64748b;">Already have an EasyMarket account?</span>
+        <a href="login.php" class="btn-secondary register-login-btn" id="btn-goto-login" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; max-width: 320px; padding: 11px 20px; font-size: 14px; font-weight: 700; color: #1e293b; background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 10px; text-decoration: none; transition: all 0.2s ease;">
+            🔑 Sign In to Your Account
+        </a>
+    </div>
 </main>
 
 <script>

@@ -1822,6 +1822,37 @@ const db = {
     if (notif) notif.is_read = 1;
   },
 
+  async markAllNotificationsAsRead(userId) {
+    if (isConnectedToPostgres && pool) {
+      await pool.query('UPDATE notifications SET is_read = TRUE WHERE user_id = $1', [userId]);
+      return;
+    }
+    memNotifications.forEach(n => {
+      if (n.user_id === userId) {
+        n.is_read = 1;
+      }
+    });
+  },
+
+  async deleteNotification(notificationId, userId) {
+    if (isConnectedToPostgres && pool) {
+      await pool.query('DELETE FROM notifications WHERE id = $1 AND user_id = $2', [notificationId, userId]);
+      return;
+    }
+    const idx = memNotifications.findIndex(n => n.id === notificationId && n.user_id === userId);
+    if (idx !== -1) {
+      memNotifications.splice(idx, 1);
+    }
+  },
+
+  async deleteAllNotifications(userId) {
+    if (isConnectedToPostgres && pool) {
+      await pool.query('DELETE FROM notifications WHERE user_id = $1', [userId]);
+      return;
+    }
+    memNotifications = memNotifications.filter(n => n.user_id !== userId);
+  },
+
   // Messaging System
   async sendMessage({ senderId, receiverId, productId, message }) {
     if (isConnectedToPostgres && pool) {

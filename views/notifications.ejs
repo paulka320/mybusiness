@@ -9,79 +9,70 @@
 </head>
 <body>
 <%- include('header') %>
-<main class="section" style="max-width: 900px;">
-    <div class="section-heading">
+<main class="section notifs-section" style="max-width: 900px; margin: 0 auto; padding: 20px 16px;">
+    <div class="section-heading" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 20px;">
         <div>
-            <h2>🔔 Marketplace Alerts & Notifications</h2>
-            <p>Real-time order dispatches, account protection updates, and community alerts.</p>
+            <h2 style="margin: 0 0 4px; font-size: 1.5rem; font-weight: 800; color: #0f172a;">🔔 Marketplace Alerts & Notifications</h2>
+            <p style="margin: 0; font-size: 13.5px; color: #64748b;">Real-time order dispatches, account protection updates, and community alerts.</p>
         </div>
-        <div style="display: flex; gap: 8px;">
-            <a href="support.php" class="btn-secondary" style="font-size: 13px; padding: 7px 14px; text-decoration: none;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="notif-header-actions">
+            <% if (notifications && notifications.length > 0) { %>
+                <button type="button" class="btn-secondary" id="btn-mark-all-read" style="font-size: 12.5px; padding: 7px 12px; cursor: pointer;">
+                    ✓ Mark All as Read
+                </button>
+                <button type="button" class="btn-secondary" id="btn-delete-all-notifs" style="font-size: 12.5px; padding: 7px 12px; color: #e11d48; border-color: #fecdd3; cursor: pointer;">
+                    🗑️ Clear All
+                </button>
+            <% } %>
+            <a href="support.php" class="btn-primary" style="font-size: 12.5px; padding: 7px 14px; text-decoration: none;">
                 🎧 Get Help
             </a>
         </div>
     </div>
 
     <!-- Persistent Integrity Guarantee Notification Banner -->
-    <div class="integrity-card" style="margin-bottom: 20px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 18px;">
+    <div class="integrity-card" style="margin-bottom: 20px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 16px;">
         <div class="integrity-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
             <span style="font-size: 22px;">🛡️</span>
             <div>
-                <strong style="color: #9a3412; font-size: 15px;">EasyMarket Authenticity & Anti-Deception Guarantee</strong>
+                <strong style="color: #9a3412; font-size: 14.5px;">EasyMarket Authenticity & Anti-Deception Guarantee</strong>
                 <div style="font-size: 11.5px; color: #c2410c;">Your account is protected under Uganda Marketplace Consumer Guidelines</div>
             </div>
         </div>
-        <p style="font-size: 13px; color: #7c2d12; line-height: 1.6; margin: 0;">
+        <p style="font-size: 13px; color: #7c2d12; line-height: 1.55; margin: 0;">
             All listings on EasyMarket require multi-angle authentic photos, truthful item condition tags, and transparent pricing. Any attempts at fraudulent listings or misleading specifications trigger automatic suspension.
         </p>
     </div>
 
     <!-- Notification Category Filter Pills -->
-    <div class="category-list" style="margin-bottom: 20px;" id="notif-filter-tabs">
-        <button type="button" class="category-pill active" onclick="filterNotifs('all', this)">📋 All Alerts (<%= notifications ? notifications.length : 0 %>)</button>
+    <div class="category-list" style="margin-bottom: 18px; display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;" id="notif-filter-tabs">
+        <button type="button" class="category-pill active" onclick="filterNotifs('all', this)">📋 All Alerts (<span id="total-notifs-count"><%= notifications ? notifications.length : 0 %></span>)</button>
         <button type="button" class="category-pill" onclick="filterNotifs('order_status', this)">📦 Orders & Dispatch</button>
         <button type="button" class="category-pill" onclick="filterNotifs('integrity_warning', this)">🛡️ Policy & Safety</button>
         <button type="button" class="category-pill" onclick="filterNotifs('message', this)">💬 Messages</button>
         <button type="button" class="category-pill" onclick="filterNotifs('support', this)">🎧 Support & Tickets</button>
     </div>
 
-    <% if (!notifications || notifications.length === 0) { %>
-        <!-- Organized Starter Alerts if empty -->
-        <div class="notifications-list" id="notifications-container">
-            <div class="notif-item notif-read" data-category="integrity_warning">
-                <div class="notif-icon" style="background: #eff6ff; color: #2563eb;">🛡️</div>
-                <div class="notif-content">
-                    <div class="notif-top">
-                        <h4 class="notif-title">Welcome to EasyMarket Uganda</h4>
-                        <span class="notif-time">System Active</span>
-                    </div>
-                    <p class="notif-body">Your account is fully activated. You can list products across Kampala and Uganda or place orders with verified dispatch.</p>
-                    <div class="notif-actions">
-                        <a href="upload.php" class="btn-notif-link">➕ List a Product</a>
-                        <a href="index.php" class="btn-notif-link">🛍️ Start Shopping</a>
-                    </div>
-                </div>
-            </div>
-
-            <div class="notif-item notif-read" data-category="order_status">
-                <div class="notif-icon" style="background: #f0fdf4; color: #16a34a;">📦</div>
-                <div class="notif-content">
-                    <div class="notif-top">
-                        <h4 class="notif-title">Order Dispatch & Real-Time Tracking</h4>
-                        <span class="notif-time">Information</span>
-                    </div>
-                    <p class="notif-body">Whenever you place an order, live tracking notifications with WhatsApp dispatch updates will appear directly here.</p>
-                    <div class="notif-actions">
-                        <a href="orders.php" class="btn-notif-link">View My Orders</a>
-                    </div>
-                </div>
+    <div id="empty-notifs-state" style="display: <%= (!notifications || notifications.length === 0) ? 'block' : 'none' %>;">
+        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 40px 20px; text-align: center;">
+            <span style="font-size: 40px; display: block; margin-bottom: 10px;">🎉</span>
+            <h3 style="margin: 0 0 6px; font-size: 1.15rem; color: #1e293b;">You're all caught up!</h3>
+            <p style="color: #64748b; font-size: 13.5px; max-width: 380px; margin: 0 auto 16px;">
+                You have no active alerts or unread notifications at the moment.
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                <a href="index.php" class="btn-primary" style="padding: 8px 16px; font-size: 13px; text-decoration: none;">🛍️ Explore Marketplace</a>
+                <a href="orders.php" class="btn-secondary" style="padding: 8px 16px; font-size: 13px; text-decoration: none;">📦 Track Orders</a>
             </div>
         </div>
-    <% } else { %>
-        <div class="notifications-list" id="notifications-container">
+    </div>
+
+    <% if (notifications && notifications.length > 0) { %>
+        <div class="notifications-list" id="notifications-container" style="display: flex; flex-direction: column; gap: 12px;">
             <% notifications.forEach(function(n) { %>
-                <div class="notif-item <%= n.is_read ? 'notif-read' : 'notif-unread' %>" id="notif-<%= n.id %>" data-category="<%= n.type %>">
-                    <div class="notif-icon">
+                <% const isRead = (n.is_read === true || n.is_read === 1 || n.is_read === '1'); %>
+                <div class="notif-item <%= isRead ? 'notif-read' : 'notif-unread' %>" id="notif-<%= n.id %>" data-category="<%= n.type %>" style="background: <%= isRead ? '#ffffff' : '#f0f9ff' %>; border: 1px solid <%= isRead ? '#e2e8f0' : '#bae6fd' %>; border-radius: 12px; padding: 14px 16px; display: flex; gap: 14px; align-items: flex-start; transition: all 0.2s ease;">
+                    <div class="notif-icon" style="font-size: 24px; flex-shrink: 0; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; background: <%= isRead ? '#f1f5f9' : '#e0f2fe' %>; border-radius: 10px;">
                         <% if (n.type === 'integrity_warning') { %>
                             🛡️
                         <% } else if (n.type === 'order_status') { %>
@@ -96,25 +87,30 @@
                             📢
                         <% } %>
                     </div>
-                    <div class="notif-content">
-                        <div class="notif-top">
-                            <h4 class="notif-title"><%= n.title %></h4>
-                            <span class="notif-time">
+                    <div class="notif-content" style="flex: 1; min-width: 0;">
+                        <div class="notif-top" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap; margin-bottom: 4px;">
+                            <h4 class="notif-title" style="margin: 0; font-size: 14.5px; font-weight: 700; color: #0f172a;"><%= n.title %></h4>
+                            <span class="notif-time" style="font-size: 11.5px; color: #94a3b8; white-space: nowrap;">
                                 <%= new Date(n.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) %>
                             </span>
                         </div>
-                        <p class="notif-body"><%= n.message %></p>
-                        <div class="notif-actions">
-                            <% if (!n.is_read) { %>
-                                <button class="btn-mark-read" data-id="<%= n.id %>">✓ Mark as Read</button>
+                        <p class="notif-body" style="margin: 0 0 10px; font-size: 13px; color: #475569; line-height: 1.5; word-break: break-word;"><%= n.message %></p>
+                        <div class="notif-actions" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <% if (!isRead) { %>
+                                <button type="button" class="btn-mark-read" data-id="<%= n.id %>" style="font-size: 12px; padding: 5px 10px; background: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                                    ✓ Mark Read
+                                </button>
                             <% } %>
                             <% if (n.type === 'message') { %>
-                                <a href="messages.php" class="btn-notif-link">Open Chat</a>
+                                <a href="messages.php" class="btn-notif-link" style="font-size: 12px; padding: 5px 10px; background: #f1f5f9; color: #334155; border-radius: 6px; text-decoration: none; font-weight: 600;">💬 Open Chat</a>
                             <% } else if (n.type === 'order_status') { %>
-                                <a href="orders.php" class="btn-notif-link">View Orders</a>
+                                <a href="orders.php" class="btn-notif-link" style="font-size: 12px; padding: 5px 10px; background: #f1f5f9; color: #334155; border-radius: 6px; text-decoration: none; font-weight: 600;">📦 View Orders</a>
                             <% } else if (n.type === 'support') { %>
-                                <a href="support.php" class="btn-notif-link">View Ticket</a>
+                                <a href="support.php" class="btn-notif-link" style="font-size: 12px; padding: 5px 10px; background: #f1f5f9; color: #334155; border-radius: 6px; text-decoration: none; font-weight: 600;">🎧 View Ticket</a>
                             <% } %>
+                            <button type="button" class="btn-delete-notif" data-id="<%= n.id %>" title="Delete this alert" style="font-size: 12px; padding: 5px 10px; background: #fff1f2; color: #e11d48; border: 1px solid #fecdd3; border-radius: 6px; cursor: pointer; margin-left: auto;">
+                                🗑️ Delete
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -124,6 +120,18 @@
 </main>
 
 <script>
+function updateHeaderNotifBadge(count) {
+    const badge = document.getElementById('notifs-counter');
+    if (badge) {
+        if (count > 0) {
+            badge.textContent = count;
+            badge.style.display = 'inline-flex';
+        } else {
+            badge.remove();
+        }
+    }
+}
+
 function filterNotifs(category, btn) {
     document.querySelectorAll('#notif-filter-tabs .category-pill').forEach(el => el.classList.remove('active'));
     if (btn) btn.classList.add('active');
@@ -139,6 +147,7 @@ function filterNotifs(category, btn) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Mark single notification as read
     document.querySelectorAll('.btn-mark-read').forEach(btn => {
         btn.addEventListener('click', async () => {
             const id = btn.dataset.id;
@@ -154,14 +163,118 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (item) {
                         item.classList.remove('notif-unread');
                         item.classList.add('notif-read');
+                        item.style.background = '#ffffff';
+                        item.style.borderColor = '#e2e8f0';
                     }
                     btn.remove();
+                    if (typeof data.unreadCount !== 'undefined') {
+                        updateHeaderNotifBadge(data.unreadCount);
+                    }
                 }
             } catch (err) {
                 console.error(err);
             }
         });
     });
+
+    // Delete single notification
+    document.querySelectorAll('.btn-delete-notif').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            try {
+                const res = await fetch('/notifications.php/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const item = document.getElementById(`notif-${id}`);
+                    if (item) {
+                        item.style.opacity = '0';
+                        item.style.transform = 'scale(0.95)';
+                        setTimeout(() => {
+                            item.remove();
+                            const container = document.getElementById('notifications-container');
+                            const remaining = container ? container.querySelectorAll('.notif-item').length : 0;
+                            const countEl = document.getElementById('total-notifs-count');
+                            if (countEl) countEl.textContent = remaining;
+                            if (remaining === 0) {
+                                const emptyState = document.getElementById('empty-notifs-state');
+                                if (emptyState) emptyState.style.display = 'block';
+                                const actions = document.getElementById('notif-header-actions');
+                                if (actions) {
+                                    const markAll = document.getElementById('btn-mark-all-read');
+                                    const delAll = document.getElementById('btn-delete-all-notifs');
+                                    if (markAll) markAll.remove();
+                                    if (delAll) delAll.remove();
+                                }
+                            }
+                        }, 200);
+                    }
+                    if (typeof data.unreadCount !== 'undefined') {
+                        updateHeaderNotifBadge(data.unreadCount);
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        });
+    });
+
+    // Mark all as read
+    const markAllBtn = document.getElementById('btn-mark-all-read');
+    if (markAllBtn) {
+        markAllBtn.addEventListener('click', async () => {
+            try {
+                const res = await fetch('/notifications.php/read-all', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.querySelectorAll('.notif-item').forEach(item => {
+                        item.classList.remove('notif-unread');
+                        item.classList.add('notif-read');
+                        item.style.background = '#ffffff';
+                        item.style.borderColor = '#e2e8f0';
+                    });
+                    document.querySelectorAll('.btn-mark-read').forEach(b => b.remove());
+                    updateHeaderNotifBadge(0);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        });
+    }
+
+    // Delete all notifications
+    const deleteAllBtn = document.getElementById('btn-delete-all-notifs');
+    if (deleteAllBtn) {
+        deleteAllBtn.addEventListener('click', async () => {
+            if (!confirm('Are you sure you want to clear all notifications?')) return;
+            try {
+                const res = await fetch('/notifications.php/delete-all', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const container = document.getElementById('notifications-container');
+                    if (container) container.innerHTML = '';
+                    const emptyState = document.getElementById('empty-notifs-state');
+                    if (emptyState) emptyState.style.display = 'block';
+                    const countEl = document.getElementById('total-notifs-count');
+                    if (countEl) countEl.textContent = '0';
+                    markAllBtn?.remove();
+                    deleteAllBtn?.remove();
+                    updateHeaderNotifBadge(0);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        });
+    }
 });
 </script>
 </body>

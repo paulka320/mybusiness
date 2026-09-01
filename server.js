@@ -806,7 +806,41 @@ app.post(['/notifications.php/read', '/notifications/read'], async (req, res) =>
   if (notifId) {
     await db.markNotificationAsRead(notifId, req.session.user_id);
   }
-  res.json({ success: true });
+  const notifs = await db.getNotificationsByUser(req.session.user_id);
+  const unreadCount = notifs.filter(n => !n.is_read).length;
+  res.json({ success: true, unreadCount });
+});
+
+app.post(['/notifications.php/read-all', '/notifications/read-all'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.json({ success: false });
+  }
+
+  await db.markAllNotificationsAsRead(req.session.user_id);
+  res.json({ success: true, unreadCount: 0 });
+});
+
+app.post(['/notifications.php/delete', '/notifications/delete'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.json({ success: false });
+  }
+
+  const notifId = parseInt(req.body.id, 10);
+  if (notifId) {
+    await db.deleteNotification(notifId, req.session.user_id);
+  }
+  const notifs = await db.getNotificationsByUser(req.session.user_id);
+  const unreadCount = notifs.filter(n => !n.is_read).length;
+  res.json({ success: true, unreadCount, remainingCount: notifs.length });
+});
+
+app.post(['/notifications.php/delete-all', '/notifications/delete-all'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.json({ success: false });
+  }
+
+  await db.deleteAllNotifications(req.session.user_id);
+  res.json({ success: true, unreadCount: 0, remainingCount: 0 });
 });
 
 // 10. Customer Support Help Center

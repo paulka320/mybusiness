@@ -58,7 +58,7 @@
                 <a href="/notifications.php" id="nav-notifs" class="nav-badge-link <%= isAlerts ? 'active' : '' %>" title="Notifications & Marketplace Rules">
                     <span>🔔 Alerts</span>
                     <% if (locals.unreadNotifsCount > 0) { %>
-                        <span class="nav-counter notif-dot"><%= locals.unreadNotifsCount %></span>
+                        <span class="nav-counter notif-dot" id="notifs-counter"><%= locals.unreadNotifsCount %></span>
                     <% } %>
                 </a>
 

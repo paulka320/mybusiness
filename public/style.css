@@ -2767,3 +2767,355 @@ img {
         grid-template-columns: 1fr;
     }
 }
+
+/* ==========================================================================
+   Responsive Architecture: Orders, Alerts/Notifications, Support & Register
+   ========================================================================== */
+
+/* Orders & Purchase History */
+.orders-section {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.orders-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.orders-header-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.orders-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 22px;
+}
+
+.orders-stat-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.orders-stat-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.orders-stat-value {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.2;
+}
+
+.orders-stat-sub {
+    font-size: 11.5px;
+    color: #94a3b8;
+}
+
+.orders-category-tabs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-bottom: 20px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.order-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+}
+
+.order-card-header {
+    background: #f8fafc;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.order-header-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.order-delivery-grid {
+    padding: 14px 20px;
+    background: #ffffff;
+    border-bottom: 1px solid #f1f5f9;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+    font-size: 13px;
+}
+
+.order-delivery-item {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    color: #475569;
+}
+
+.order-items-list {
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.order-item-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border-radius: 10px;
+    border: 1px solid #f1f5f9;
+}
+
+.order-item-thumb {
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
+    background: white;
+    border-radius: 8px;
+    padding: 4px;
+    border: 1px solid #e2e8f0;
+    flex-shrink: 0;
+}
+
+.order-item-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.order-item-chat-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    text-decoration: none;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.order-actions-bar {
+    padding: 12px 20px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.order-refund-wrapper {
+    margin-left: auto;
+}
+
+/* Customer Support & Resolution Center */
+.support-section {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.support-whatsapp-banner {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.support-whatsapp-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: 1;
+    min-width: 240px;
+}
+
+.support-whatsapp-icon {
+    font-size: 32px;
+    flex-shrink: 0;
+}
+
+.support-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+
+.support-card {
+    background: white;
+    padding: 22px;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.02);
+    box-sizing: border-box;
+}
+
+.support-ticket-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px;
+    background: #f8fafc;
+}
+
+/* Tablet & Mobile Media Queries for Orders, Support & Alerts */
+@media (max-width: 900px) {
+    .orders-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+
+    .support-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+}
+
+@media (max-width: 640px) {
+    .orders-stats-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .orders-stat-card {
+        padding: 12px;
+    }
+
+    .orders-stat-value {
+        font-size: 1.15rem;
+    }
+
+    .order-card-header {
+        padding: 12px 14px;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .order-header-price {
+        align-self: flex-start;
+        margin-top: 4px;
+    }
+
+    .order-delivery-grid {
+        padding: 12px 14px;
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .order-items-list {
+        padding: 12px 14px;
+    }
+
+    .order-item-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .order-item-thumb {
+        width: 50px;
+        height: 50px;
+    }
+
+    .order-item-chat-btn {
+        width: 100%;
+        text-align: center;
+    }
+
+    .order-actions-bar {
+        padding: 12px 14px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .order-actions-left,
+    .order-actions-left a {
+        width: 100%;
+        text-align: center;
+        box-sizing: border-box;
+    }
+
+    .order-refund-wrapper {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .support-whatsapp-banner {
+        padding: 14px;
+        flex-direction: column;
+        align-items: stretch;
+        text-align: left;
+    }
+
+    .support-whatsapp-banner a {
+        width: 100%;
+        text-align: center;
+        box-sizing: border-box;
+    }
+
+    .support-card {
+        padding: 16px 14px;
+    }
+
+    .notifs-section {
+        padding: 16px 12px !important;
+    }
+
+    .notif-item {
+        padding: 12px !important;
+        gap: 10px !important;
+    }
+
+    .notif-icon {
+        width: 36px !important;
+        height: 36px !important;
+        font-size: 20px !important;
+    }
+
+    .register-login-card {
+        padding: 16px 14px;
+    }
+
+    .register-login-btn {
+        width: 100%;
+        box-sizing: border-box;
+    }
+}
+

@@ -9,21 +9,21 @@
 </head>
 <body>
 <%- include('header') %>
-<main class="section" style="max-width: 960px;">
-    <div class="section-heading">
+<main class="section support-section" style="max-width: 960px; margin: 0 auto; padding: 20px 16px;">
+    <div class="section-heading support-page-header">
         <div>
-            <h2>🎧 Customer Support & Resolution Center</h2>
-            <p>Need help with an order, seller issue, or verification? Open a ticket or contact our WhatsApp helpline.</p>
+            <h2 style="margin: 0 0 4px; font-size: 1.5rem; font-weight: 800; color: #0f172a;">🎧 Customer Support & Resolution Center</h2>
+            <p style="margin: 0; font-size: 13.5px; color: #64748b;">Need help with an order, seller issue, or verification? Open a ticket or contact our WhatsApp helpline.</p>
         </div>
     </div>
 
     <% if (locals.success) { %>
-        <div class="alert alert-success"><%= success %></div>
+        <div class="alert alert-success" style="margin-bottom: 18px;"><%= success %></div>
     <% } %>
 
     <% if (locals.errors && errors.length > 0) { %>
-        <div class="alert alert-error">
-            <ul>
+        <div class="alert alert-error" style="margin-bottom: 18px;">
+            <ul style="margin: 0; padding-left: 20px;">
                 <% errors.forEach(function(error) { %>
                     <li><%= error %></li>
                 <% }); %>
@@ -32,79 +32,87 @@
     <% } %>
 
     <!-- Fast WhatsApp Support Card -->
-    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 14px; padding: 20px; margin-bottom: 28px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
-        <div style="display: flex; align-items: center; gap: 14px;">
-            <span style="font-size: 32px;">📱</span>
+    <div class="support-whatsapp-banner">
+        <div class="support-whatsapp-info">
+            <span class="support-whatsapp-icon">📱</span>
             <div>
-                <strong style="color: #15803d; font-size: 16px;">Official EasyMarket WhatsApp Support Line</strong>
-                <p style="margin: 4px 0 0; font-size: 13px; color: #166534;">
+                <strong style="color: #15803d; font-size: 15px; display: block;">Official EasyMarket WhatsApp Support Line</strong>
+                <p style="margin: 4px 0 0; font-size: 13px; color: #166534; line-height: 1.5;">
                     Chat directly with our Kampala customer care team for expedited delivery tracking and dispute resolution.
                 </p>
             </div>
         </div>
-        <a href="https://wa.me/256763480495?text=<%= encodeURIComponent('Hello EasyMarket Support Team, I need assistance with my account/order.') %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp" style="margin: 0;">
+        <a href="https://wa.me/256763480495?text=<%= encodeURIComponent('Hello EasyMarket Support Team, I need assistance with my account/order.') %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp" style="margin: 0; white-space: nowrap;">
             💬 Open WhatsApp Support
         </a>
     </div>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 28px;">
+    <div class="support-grid">
         <!-- Submit Ticket Form -->
-        <div style="background: white; padding: 24px; border-radius: 18px; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px rgba(0,0,0,0.03);">
-            <h3 style="margin: 0 0 16px; font-size: 18px;">Submit a Support Ticket</h3>
+        <div class="support-card">
+            <h3 style="margin: 0 0 16px; font-size: 1.15rem; font-weight: 700; color: #0f172a;">Submit a Support Ticket</h3>
             <form method="POST" action="support.php" class="product-form">
                 <% if (!locals.user) { %>
-                    <label>Your Name</label>
-                    <input type="text" name="name" placeholder="Full name" required>
+                    <div style="margin-bottom: 14px;">
+                        <label style="display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 5px;">Your Name</label>
+                        <input type="text" name="name" placeholder="Full name" style="width: 100%; box-sizing: border-box;" required>
+                    </div>
 
-                    <label>Email Address</label>
-                    <input type="email" name="email" placeholder="you@example.com" required>
+                    <div style="margin-bottom: 14px;">
+                        <label style="display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 5px;">Email Address</label>
+                        <input type="email" name="email" placeholder="you@example.com" style="width: 100%; box-sizing: border-box;" required>
+                    </div>
                 <% } %>
 
-                <label>Subject / Issue Category</label>
-                <select name="subject" required>
-                    <option value="">Select Issue</option>
-                    <option value="Order & Delivery Tracking">Order & Delivery Tracking</option>
-                    <option value="Payment / Mobile Money Confirmation">Payment / Mobile Money Confirmation</option>
-                    <option value="Product Authenticity Inquiry">Product Authenticity Inquiry</option>
-                    <option value="Return / Refund Dispute">Return / Refund Dispute</option>
-                    <option value="Seller Account & Listing Approval">Seller Account & Listing Approval</option>
-                    <option value="Other Assistance">Other Assistance</option>
-                </select>
+                <div style="margin-bottom: 14px;">
+                    <label style="display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 5px;">Subject / Issue Category</label>
+                    <select name="subject" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;" required>
+                        <option value="">Select Issue</option>
+                        <option value="Order & Delivery Tracking">Order & Delivery Tracking</option>
+                        <option value="Payment / Mobile Money Confirmation">Payment / Mobile Money Confirmation</option>
+                        <option value="Product Authenticity Inquiry">Product Authenticity Inquiry</option>
+                        <option value="Return / Refund Dispute">Return / Refund Dispute</option>
+                        <option value="Seller Account & Listing Approval">Seller Account & Listing Approval</option>
+                        <option value="Other Assistance">Other Assistance</option>
+                    </select>
+                </div>
 
-                <label>Detailed Message</label>
-                <textarea name="message" rows="5" placeholder="Describe your question or issue with as much detail as possible (include Order ID if applicable)..." required></textarea>
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 5px;">Detailed Message</label>
+                    <textarea name="message" rows="5" placeholder="Describe your question or issue with as much detail as possible (include Order ID if applicable)..." style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; font-family: inherit;" required></textarea>
+                </div>
 
-                <button type="submit" class="btn-primary" style="width: 100%; margin-top: 10px;">Submit Ticket</button>
+                <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; font-size: 14px; font-weight: 700;">Submit Ticket</button>
             </form>
         </div>
 
         <!-- My Past Tickets -->
-        <div style="background: white; padding: 24px; border-radius: 18px; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px rgba(0,0,0,0.03);">
-            <h3 style="margin: 0 0 16px; font-size: 18px;">My Support History</h3>
+        <div class="support-card">
+            <h3 style="margin: 0 0 16px; font-size: 1.15rem; font-weight: 700; color: #0f172a;">My Support History</h3>
             <% if (!locals.tickets || locals.tickets.length === 0) { %>
-                <div style="text-align: center; color: #64748b; padding: 30px 10px;">
-                    <span style="font-size: 32px; display: block; margin-bottom: 8px;">📬</span>
-                    <p style="margin: 0; font-size: 14px;">You have no active support tickets.</p>
+                <div style="text-align: center; color: #64748b; padding: 40px 10px;">
+                    <span style="font-size: 36px; display: block; margin-bottom: 8px;">📬</span>
+                    <p style="margin: 0; font-size: 13.5px;">You have no active support tickets.</p>
                 </div>
             <% } else { %>
-                <div style="display: flex; flex-direction: column; gap: 14px;">
+                <div style="display: flex; flex-direction: column; gap: 12px;">
                     <% locals.tickets.forEach(function(t) { %>
-                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; background: #f8fafc;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                <strong style="font-size: 14px; color: #1e293b;"><%= t.subject %></strong>
-                                <span class="badge-tag" style="background: <%= t.status === 'Resolved' ? '#dcfce7' : '#fef3c7' %>; color: <%= t.status === 'Resolved' ? '#166534' : '#92400e' %>;">
+                        <div class="support-ticket-item">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">
+                                <strong style="font-size: 13.5px; color: #1e293b;"><%= t.subject %></strong>
+                                <span class="badge-tag" style="background: <%= t.status === 'Resolved' ? '#dcfce7' : '#fef3c7' %>; color: <%= t.status === 'Resolved' ? '#166534' : '#92400e' %>; padding: 2px 8px; border-radius: 9999px; font-size: 11.5px; font-weight: 700; white-space: nowrap;">
                                     <%= t.status %>
                                 </span>
                             </div>
-                            <p style="font-size: 13px; color: #475569; margin: 0 0 8px;"><%= t.message %></p>
+                            <p style="font-size: 12.5px; color: #475569; margin: 0 0 8px; line-height: 1.5; word-break: break-word;"><%= t.message %></p>
                             <% if (t.admin_reply) { %>
                                 <div style="background: #ffffff; border-left: 3px solid #6366f1; padding: 10px; border-radius: 6px; margin-top: 8px;">
                                     <div style="font-size: 11px; font-weight: 700; color: #4338ca; text-transform: uppercase;">Support Response:</div>
-                                    <p style="font-size: 13px; color: #1e293b; margin: 4px 0 0;"><%= t.admin_reply %></p>
+                                    <p style="font-size: 12.5px; color: #1e293b; margin: 4px 0 0; line-height: 1.45;"><%= t.admin_reply %></p>
                                 </div>
                             <% } %>
                             <div style="font-size: 11px; color: #94a3b8; margin-top: 8px;">
-                                <%= new Date(t.created_at).toLocaleDateString() %>
+                                📅 <%= new Date(t.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) %>
                             </div>
                         </div>
                     <% }); %>
