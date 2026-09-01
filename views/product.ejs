@@ -168,13 +168,13 @@
             <!-- WhatsApp & In-App Direct Communication Options -->
             <div class="seller-contact-card">
                 <div style="font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
-                    Direct Communication & WhatsApp Dispatch
+                    Direct Communication with Seller
                 </div>
                 <div class="contact-buttons-group">
                     <% if (locals.waLink) { %>
-                        <a href="<%= waLink %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp" id="btn-chat-whatsapp" title="Send WhatsApp message to official EasyMarket line 0763480495">
+                        <a href="<%= waLink %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp" id="btn-chat-whatsapp" title="Chat with seller on WhatsApp">
                             <span style="font-size: 18px;">💬</span>
-                            <span>Chat on WhatsApp (0763480495)</span>
+                            <span>Chat with Seller on WhatsApp</span>
                         </a>
                     <% } %>
 
@@ -183,9 +183,9 @@
                         <span>In-App Direct Message</span>
                     </a>
                 </div>
-                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #64748b; margin-top: 8px;">
-                    <span>📞 Seller Call: <strong><%= product.phone %></strong></span>
-                    <span>📱 WhatsApp Line: <strong>0763480495</strong></span>
+                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #64748b; margin-top: 10px; padding-top: 8px; border-top: 1px solid #f1f5f9;">
+                    <span>📞 Seller Call / WhatsApp: <strong><%= product.whatsapp_number || product.phone %></strong></span>
+                    <span>🏢 Dispatch Helpline: <a href="https://wa.me/256763480495?text=<%= encodeURIComponent('Hello EasyMarket Support, I need help with Listing #' + product.id) %>" target="_blank" rel="noopener noreferrer" style="color: #16a34a; font-weight: 600; text-decoration: none;">0763480495</a></span>
                 </div>
             </div>
 

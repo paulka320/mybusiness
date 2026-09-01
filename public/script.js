@@ -464,8 +464,7 @@ function setupCartActions() {
 }
 
 // -------------------------------------------------------------
-// WhatsApp Business Dispatcher (Destination: 0763480495)
-// Connects client's registered account to 0763480495
+// WhatsApp Standard 1-on-1 Direct Chat Handler
 // -------------------------------------------------------------
 function cleanUgandaWhatsAppNumber(num) {
     if (!num) return '';
@@ -476,161 +475,11 @@ function cleanUgandaWhatsAppNumber(num) {
     return cleaned;
 }
 
-function promptForUserWhatsApp(callback) {
-    let savedNum = localStorage.getItem('user_whatsapp') || (window.EASY_MARKET_USER && window.EASY_MARKET_USER.whatsapp_number) || '';
-    
-    // Create interactive modal overlay
-    let overlay = document.getElementById('wa-num-modal');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'wa-num-modal';
-        overlay.style.position = 'fixed';
-        overlay.style.top = '0';
-        overlay.style.left = '0';
-        overlay.style.width = '100vw';
-        overlay.style.height = '100vh';
-        overlay.style.backgroundColor = 'rgba(15, 23, 42, 0.7)';
-        overlay.style.backdropFilter = 'blur(4px)';
-        overlay.style.zIndex = '99999';
-        overlay.style.display = 'flex';
-        overlay.style.alignItems = 'center';
-        overlay.style.justifyContent = 'center';
-        overlay.style.padding = '16px';
-        overlay.style.boxSizing = 'border-box';
-
-        overlay.innerHTML = `
-            <div style="background: #ffffff; border-radius: 16px; max-width: 440px; width: 100%; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); font-family: inherit; position: relative;">
-                <button type="button" id="wa-modal-close" style="position: absolute; top: 14px; right: 14px; background: none; border: none; font-size: 22px; cursor: pointer; color: #94a3b8;">&times;</button>
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-                    <span style="font-size: 28px;">💬</span>
-                    <div>
-                        <h3 style="margin: 0; font-size: 1.15rem; color: #0f172a; font-weight: 800;">Send via Your WhatsApp</h3>
-                        <span style="font-size: 12px; color: #16a34a; font-weight: 700;">To EasyMarket Line: 0763480495</span>
-                    </div>
-                </div>
-                <p style="font-size: 13px; color: #475569; line-height: 1.5; margin: 0 0 16px;">
-                    Please provide or confirm your <strong>WhatsApp Phone Number</strong> so EasyMarket dispatch receives and verifies your message from your personal WhatsApp account.
-                </p>
-                <div style="margin-bottom: 16px;">
-                    <label style="display: block; font-size: 12.5px; font-weight: 700; color: #334155; margin-bottom: 6px;">Your WhatsApp Phone Number:</label>
-                    <input type="tel" id="wa-modal-input" placeholder="e.g. 0763480495 or 0701234567" value="${savedNum}" style="width: 100%; box-sizing: border-box; padding: 12px 14px; border: 1.5px solid #cbd5e1; border-radius: 10px; font-size: 14px; font-weight: 600; color: #0f172a;">
-                </div>
-                <div style="display: flex; gap: 10px;">
-                    <button type="button" id="wa-modal-submit" class="btn-whatsapp" style="flex: 1; padding: 12px; font-size: 14px; font-weight: 700; border-radius: 10px; justify-content: center; cursor: pointer;">
-                        🚀 Open WhatsApp Account
-                    </button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(overlay);
-    } else {
-        const input = document.getElementById('wa-modal-input');
-        if (input && savedNum) input.value = savedNum;
-        overlay.style.display = 'flex';
-    }
-
-    const closeBtn = document.getElementById('wa-modal-close');
-    const submitBtn = document.getElementById('wa-modal-submit');
-    const inputField = document.getElementById('wa-modal-input');
-
-    const handleClose = () => {
-        overlay.style.display = 'none';
-    };
-
-    closeBtn.onclick = handleClose;
-    overlay.onclick = (e) => {
-        if (e.target === overlay) handleClose();
-    };
-
-    submitBtn.onclick = () => {
-        const entered = (inputField.value || '').trim();
-        if (entered) {
-            localStorage.setItem('user_whatsapp', entered);
-            if (window.EASY_MARKET_USER) {
-                window.EASY_MARKET_USER.whatsapp_number = entered;
-            }
-        }
-        overlay.style.display = 'none';
-        callback(entered || savedNum || 'Registered Client');
-    };
-}
-
-function openWhatsAppChatToBusiness(originalUrl, customMessage) {
-    const businessNumber = '256763480495';
-    let savedNum = (window.EASY_MARKET_USER && window.EASY_MARKET_USER.whatsapp_number) || localStorage.getItem('user_whatsapp') || '';
-    let savedName = (window.EASY_MARKET_USER && window.EASY_MARKET_USER.name) || localStorage.getItem('user_name') || 'Customer';
-
-    const executeLaunch = (senderWhatsApp) => {
-        let textToSend = '';
-        if (customMessage) {
-            textToSend = customMessage;
-        } else if (originalUrl && originalUrl.includes('text=')) {
-            try {
-                const urlObj = new URL(originalUrl, window.location.origin);
-                textToSend = decodeURIComponent(urlObj.searchParams.get('text') || '');
-            } catch(e) {
-                const parts = originalUrl.split('text=');
-                if (parts[1]) textToSend = decodeURIComponent(parts[1]);
-            }
-        }
-
-        if (!textToSend) {
-            textToSend = `Hello EasyMarket! I am ${savedName} (messaging from my WhatsApp: ${senderWhatsApp}). I have an inquiry regarding marketplace items.`;
-        }
-
-        // Ensure the sender's WhatsApp is mentioned in the message if not already present
-        if (senderWhatsApp && !textToSend.includes(senderWhatsApp)) {
-            textToSend = `[Sender WhatsApp: ${senderWhatsApp} | Name: ${savedName}]\n` + textToSend;
-        }
-
-        const encoded = encodeURIComponent(textToSend);
-        
-        // Multi-tier universal launch sequence:
-        // 1. Direct App Scheme (Opens native WhatsApp on mobile / desktop app)
-        // 2. Official Web API (api.whatsapp.com)
-        // 3. WhatsApp Web fallback (web.whatsapp.com)
-        const appScheme = `whatsapp://send?phone=${businessNumber}&text=${encoded}`;
-        const apiUrl = `https://api.whatsapp.com/send?phone=${businessNumber}&text=${encoded}`;
-        const webUrl = `https://web.whatsapp.com/send?phone=${businessNumber}&text=${encoded}`;
-
-        const isMobile = /Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent);
-
-        if (isMobile) {
-            // Attempt to trigger native app
-            window.location.href = appScheme;
-            setTimeout(() => {
-                window.open(apiUrl, '_blank');
-            }, 800);
-        } else {
-            // Desktop browser: open official API which offers Desktop App + WhatsApp Web
-            window.open(apiUrl, '_blank');
-        }
-    };
-
-    if (!savedNum) {
-        promptForUserWhatsApp(executeLaunch);
-    } else {
-        executeLaunch(savedNum);
-    }
-}
-
-function setupWhatsAppButtonListeners() {
-    document.addEventListener('click', (e) => {
-        const btn = e.target.closest('.btn-whatsapp, .btn-whatsapp-sm, #btn-chat-whatsapp');
-        if (btn) {
-            e.preventDefault();
-            const href = btn.getAttribute('href') || '';
-            openWhatsAppChatToBusiness(href);
-        }
-    });
-}
-
 window.addEventListener('DOMContentLoaded', () => {
     setupMobileNav();
     updateCartCount();
     setupCartActions();
     setupCarousel();
-    setupWhatsAppButtonListeners();
     renderCartPage();
     renderCheckoutPage();
     if (window.orderPlaced) {

@@ -121,9 +121,8 @@
                             const isSupportChat = (!counterparty.id || counterparty.id === 2 || (counterparty.name && counterparty.name.toLowerCase().includes('support')) || (counterparty.name && counterparty.name.toLowerCase().includes('admin')));
                             const targetWaNum = isSupportChat ? '256763480495' : db.sanitizeWhatsAppNumber(counterparty.whatsapp_number || counterparty.phone || '256763480495');
                             const customerName = locals.user ? user.name : 'Customer';
-                            const customerContact = locals.user ? (user.whatsapp_number || user.phone || user.email || '') : '';
                             const itemName = locals.activeProduct ? ` regarding "${activeProduct.title}" (Item #${activeProduct.id})` : '';
-                            const waText = `Hello! I am ${customerName}${customerContact ? ` (messaging from my registered WhatsApp: ${customerContact})` : ''}. I am messaging you${itemName} on EasyMarket Uganda.`;
+                            const waText = `Hello ${counterparty.name || 'there'}! I am messaging you${itemName} on EasyMarket Uganda.`;
                             const waUrl = `https://wa.me/${targetWaNum}?text=${encodeURIComponent(waText)}`;
                         %>
                         <a href="<%= waUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm" style="display: inline-flex; align-items: center; gap: 5px; text-decoration: none;">

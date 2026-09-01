@@ -427,26 +427,11 @@ app.get(['/product.php', '/product'], async (req, res) => {
     // Pending price request if any
     const pendingPriceRequest = await db.getPendingPriceChangeRequestsForProduct(id);
 
-    // Official WhatsApp destination: 0763480495 (+256 763 480495)
-    // Opens the customer's WhatsApp web / app with messages directed to 0763480495
-    const targetWaNumber = '256763480495';
-    
-    // Include the buyer's registered credentials if logged in
-    const buyerName = req.session && req.session.user_name ? req.session.user_name : (res.locals.user ? res.locals.user.name : '');
-    const buyerPhone = (req.session && (req.session.user_whatsapp || req.session.user_phone)) || (res.locals.user ? (res.locals.user.whatsapp_number || res.locals.user.phone) : '');
-    
-    let senderPrefix = '';
-    if (buyerName && buyerPhone) {
-      senderPrefix = `Hello EasyMarket! I am ${buyerName} (messaging from my registered WhatsApp: ${buyerPhone}).\n\n`;
-    } else if (buyerName) {
-      senderPrefix = `Hello EasyMarket! I am ${buyerName}.\n\n`;
-    } else if (buyerPhone) {
-      senderPrefix = `Hello EasyMarket! (Messaging from my registered WhatsApp: ${buyerPhone}).\n\n`;
-    } else {
-      senderPrefix = `Hello EasyMarket!\n\n`;
-    }
+    // WhatsApp destination: Seller's direct WhatsApp/phone (Person B in 1-on-1 marketplace conversation)
+    const sellerWaRaw = product.whatsapp_number || product.seller_phone || product.phone || '0763480495';
+    const targetWaNumber = db.sanitizeWhatsAppNumber(sellerWaRaw);
 
-    const waMessageText = `${senderPrefix}I am inquiring about "${product.title}" (Listing #${product.id}, Price: UGX ${Number(product.price).toLocaleString()}, Location: ${product.location || 'Uganda'}).\n\nIs this product currently in stock and available for delivery/order?`;
+    const waMessageText = `Hello! I am interested in buying "${product.title}" listed for UGX ${Number(product.price).toLocaleString()} on EasyMarket Uganda. Is this item still available for purchase?`;
     const waMessage = encodeURIComponent(waMessageText);
     const waLink = `https://wa.me/${targetWaNumber}?text=${waMessage}`;
 
