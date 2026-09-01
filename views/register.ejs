@@ -108,9 +108,11 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    const nameInput = document.getElementById('reg-name');
     const phoneInput = document.getElementById('reg-phone');
     const waInput = document.getElementById('reg-whatsapp');
     const syncCheckbox = document.getElementById('sync_phone_wa');
+    const form = document.querySelector('form');
 
     syncCheckbox.addEventListener('change', () => {
         if (syncCheckbox.checked) {
@@ -123,6 +125,19 @@ document.addEventListener('DOMContentLoaded', () => {
             waInput.value = phoneInput.value;
         }
     });
+
+    if (form) {
+        form.addEventListener('submit', () => {
+            const finalWa = (waInput && waInput.value ? waInput.value : (phoneInput ? phoneInput.value : '')).trim();
+            const finalName = (nameInput ? nameInput.value : '').trim();
+            if (finalWa) {
+                try {
+                    localStorage.setItem('user_whatsapp', finalWa);
+                    if (finalName) localStorage.setItem('user_name', finalName);
+                } catch(e) {}
+            }
+        });
+    }
 });
 </script>
 </body>

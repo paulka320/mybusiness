@@ -64,14 +64,34 @@
             <label>Delivery Address</label>
             <textarea name="address" required><%= locals.address || '' %></textarea>
 
-            <label>Phone Number</label>
-            <input type="text" name="phone" value="<%= locals.phone || '' %>" required>
+            <label>Phone Number (WhatsApp)</label>
+            <input type="text" id="checkout-phone" name="phone" value="<%= locals.phone || (locals.user ? (locals.user.whatsapp_number || locals.user.phone) : '') || '' %>" placeholder="e.g. 0763480495 or 0701234567" required>
 
             <label>Payment Reference</label>
             <input type="text" name="payment_reference" value="<%= locals.payment_reference || '' %>" placeholder="Enter payment reference or mobile money code">
 
             <button id="checkout-submit" type="submit">Place Order</button>
         </form>
+
+        <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const chkPhone = document.getElementById('checkout-phone');
+            if (chkPhone && !chkPhone.value) {
+                const saved = localStorage.getItem('user_whatsapp');
+                if (saved) chkPhone.value = saved;
+            }
+            const form = document.getElementById('checkout-form');
+            if (form && chkPhone) {
+                form.addEventListener('submit', () => {
+                    if (chkPhone.value.trim()) {
+                        try {
+                            localStorage.setItem('user_whatsapp', chkPhone.value.trim());
+                        } catch(e) {}
+                    }
+                });
+            }
+        });
+        </script>
     <% } %>
 </main>
 </body>
