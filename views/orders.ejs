@@ -16,8 +16,14 @@
             <p style="margin: 0; font-size: 13.5px; color: #64748b;">Track real-time fulfillment status, courier dispatch, and 100% money-back returns.</p>
         </div>
         <div class="orders-header-actions">
-            <a href="https://wa.me/256763480495?text=<%= encodeURIComponent('Hello EasyMarket Support, I need assistance with my orders.') %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm" style="padding: 8px 14px; font-size: 12.5px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
-                💬 WhatsApp Dispatch
+            <% 
+                const ordUsrName = locals.user ? locals.user.name : 'Customer';
+                const ordUsrWa = locals.user ? (locals.user.whatsapp_number || locals.user.phone || '') : '';
+                const ordHeaderWaText = `Hello EasyMarket Dispatch! I am ${ordUsrName}${ordUsrWa ? ` (messaging from my registered WhatsApp: ${ordUsrWa})` : ''}. I need assistance with my EasyMarket orders.`;
+                const ordHeaderWaUrl = `https://wa.me/256763480495?text=${encodeURIComponent(ordHeaderWaText)}`;
+            %>
+            <a href="<%= ordHeaderWaUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm" style="padding: 8px 14px; font-size: 12.5px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                💬 WhatsApp Dispatch Desk (0763480495)
             </a>
             <a href="index.php" class="btn-primary" style="padding: 8px 16px; font-size: 12.5px; text-decoration: none;">
                 🛍️ Continue Shopping
@@ -116,8 +122,13 @@
                     <!-- Order Action Bar (Returns, Refund, WhatsApp Help) -->
                     <div class="order-actions-bar">
                         <div class="order-actions-left">
-                            <a href="https://wa.me/256763480495?text=<%= encodeURIComponent(`Hello EasyMarket Dispatch, I am inquiring about my Order #${order.id} status.`) %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm" style="padding: 6px 12px; font-size: 12px; text-decoration: none;">
-                                💬 Track on WhatsApp
+                            <%
+                                const ordItemsList = (order.items || []).map(i => `${i.quantity}x ${i.title}`).join(', ');
+                                const ordItemWaText = `Hello EasyMarket Dispatch! I am ${ordUsrName}${ordUsrWa ? ` (messaging from my registered WhatsApp: ${ordUsrWa})` : (order.phone ? ` (Contact: ${order.phone})` : '')}.\n\nI am inquiring about my Order #${order.id} dispatch status:\n• Items: ${ordItemsList || 'Marketplace items'}\n• Total: UGX ${Number(order.total).toLocaleString()}\n• Delivery: ${order.address}\n• Status: ${order.status}\n\nPlease provide me with an update on courier dispatch.`;
+                                const ordItemWaUrl = `https://wa.me/256763480495?text=${encodeURIComponent(ordItemWaText)}`;
+                            %>
+                            <a href="<%= ordItemWaUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm" style="padding: 6px 12px; font-size: 12px; text-decoration: none;">
+                                💬 Track on WhatsApp (0763480495)
                             </a>
                         </div>
 

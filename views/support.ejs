@@ -32,17 +32,23 @@
     <% } %>
 
     <!-- Fast WhatsApp Support Card -->
+    <% 
+        const suppUsrName = locals.user ? locals.user.name : 'Customer';
+        const suppUsrWa = locals.user ? (locals.user.whatsapp_number || locals.user.phone || '') : '';
+        const suppWaText = `Hello EasyMarket Support Team! I am ${suppUsrName}${suppUsrWa ? ` (messaging from my registered WhatsApp: ${suppUsrWa})` : ''}. I need customer care assistance with my account / order.`;
+        const suppWaUrl = `https://wa.me/256763480495?text=${encodeURIComponent(suppWaText)}`;
+    %>
     <div class="support-whatsapp-banner">
         <div class="support-whatsapp-info">
             <span class="support-whatsapp-icon">📱</span>
             <div>
-                <strong style="color: #15803d; font-size: 15px; display: block;">Official EasyMarket WhatsApp Support Line</strong>
+                <strong style="color: #15803d; font-size: 15px; display: block;">Official EasyMarket WhatsApp Support Line (0763480495)</strong>
                 <p style="margin: 4px 0 0; font-size: 13px; color: #166534; line-height: 1.5;">
-                    Chat directly with our Kampala customer care team for expedited delivery tracking and dispute resolution.
+                    Chat directly from your WhatsApp to our Kampala customer care team (<strong>0763480495</strong>) for expedited delivery tracking and instant dispute resolution.
                 </p>
             </div>
         </div>
-        <a href="https://wa.me/256763480495?text=<%= encodeURIComponent('Hello EasyMarket Support Team, I need assistance with my account/order.') %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp" style="margin: 0; white-space: nowrap;">
+        <a href="<%= suppWaUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp" style="margin: 0; white-space: nowrap;">
             💬 Open WhatsApp Support
         </a>
     </div>

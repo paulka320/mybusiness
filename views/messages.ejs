@@ -19,8 +19,14 @@
             <a href="messages.php?to=1" class="btn-secondary" style="font-size: 13px; padding: 8px 14px; text-decoration: none;">
                 🎧 Chat Support Desk
             </a>
-            <a href="https://wa.me/256763480495?text=<%= encodeURIComponent('Hello EasyMarket Support, I have an inquiry.') %>" target="_blank" class="btn-whatsapp-sm" style="padding: 8px 14px; font-size: 13px;">
-                💬 Official WhatsApp
+            <%
+                const msgUsrName = locals.user ? locals.user.name : 'Customer';
+                const msgUsrWa = locals.user ? (locals.user.whatsapp_number || locals.user.phone || '') : '';
+                const msgHeaderWaText = `Hello EasyMarket Official WhatsApp (0763480495)! I am ${msgUsrName}${msgUsrWa ? ` (messaging from my registered WhatsApp: ${msgUsrWa})` : ''}. I have an inquiry regarding marketplace listings and orders.`;
+                const msgHeaderWaUrl = `https://wa.me/256763480495?text=${encodeURIComponent(msgHeaderWaText)}`;
+            %>
+            <a href="<%= msgHeaderWaUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm" style="padding: 8px 14px; font-size: 13px; text-decoration: none;">
+                💬 Official WhatsApp (0763480495)
             </a>
         </div>
     </div>
@@ -112,14 +118,15 @@
                         <% } %>
 
                         <% 
-                            const targetWaNum = db.sanitizeWhatsAppNumber(counterparty.whatsapp_number || counterparty.phone || db.SYSTEM_WHATSAPP_NUMBER || '256763480495');
+                            const isSupportChat = (!counterparty.id || counterparty.id === 2 || (counterparty.name && counterparty.name.toLowerCase().includes('support')) || (counterparty.name && counterparty.name.toLowerCase().includes('admin')));
+                            const targetWaNum = isSupportChat ? '256763480495' : db.sanitizeWhatsAppNumber(counterparty.whatsapp_number || counterparty.phone || '256763480495');
                             const customerName = locals.user ? user.name : 'Customer';
-                            const customerContact = locals.user ? (user.phone || user.whatsapp_number || user.email || '') : '';
-                            const itemName = locals.activeProduct ? ` regarding "${activeProduct.title}"` : '';
-                            const waText = `Hello! I am ${customerName} (Registered on EasyMarket: ${customerContact}). I am messaging you${itemName} to follow up.`;
+                            const customerContact = locals.user ? (user.whatsapp_number || user.phone || user.email || '') : '';
+                            const itemName = locals.activeProduct ? ` regarding "${activeProduct.title}" (Item #${activeProduct.id})` : '';
+                            const waText = `Hello! I am ${customerName}${customerContact ? ` (messaging from my registered WhatsApp: ${customerContact})` : ''}. I am messaging you${itemName} on EasyMarket Uganda.`;
                             const waUrl = `https://wa.me/${targetWaNum}?text=${encodeURIComponent(waText)}`;
                         %>
-                        <a href="<%= waUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm" style="display: inline-flex; align-items: center; gap: 5px;">
+                        <a href="<%= waUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm" style="display: inline-flex; align-items: center; gap: 5px; text-decoration: none;">
                             <span>💬 Open in WhatsApp</span>
                         </a>
                     </div>

@@ -16,9 +16,35 @@
     </div>
 
     <% if (locals.success) { %>
-        <div class="alert alert-success"><%= success %></div>
+        <div class="alert alert-success" style="font-size: 15px; padding: 18px; border-radius: 12px; margin-bottom: 20px;">
+            <div style="font-weight: 700; font-size: 16px; margin-bottom: 6px;">🎉 Order Placed Successfully!</div>
+            <%= success %>
+        </div>
         <script>window.orderPlaced = true;</script>
-        <p><a href="index.php">Continue shopping</a> or view your <a href="orders.php">orders</a>.</p>
+        
+        <% if (locals.orderId) { %>
+            <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 14px; padding: 22px; margin-bottom: 24px; text-align: center;">
+                <span style="font-size: 36px; display: block; margin-bottom: 8px;">📱</span>
+                <h3 style="margin: 0 0 6px; font-size: 1.2rem; color: #166534; font-weight: 800;">Fast-Track Dispatch on WhatsApp (0763480495)</h3>
+                <p style="color: #15803d; font-size: 13.5px; max-width: 540px; margin: 0 auto 16px; line-height: 1.5;">
+                    Send an instant confirmation from your WhatsApp to our official business WhatsApp line <strong>0763480495</strong> (+256 763 480495) so our Kampala courier team can begin immediate packaging and dispatch.
+                </p>
+                <%
+                    const ordBuyerName = locals.user ? locals.user.name : 'Customer';
+                    const ordBuyerPhone = locals.buyerPhone || (locals.user ? (locals.user.whatsapp_number || locals.user.phone) : '');
+                    const ordWaText = `Hello EasyMarket Dispatch! I just placed Order #${locals.orderId} on EasyMarket Uganda.\n\n• Name: ${ordBuyerName}\n• WhatsApp / Phone: ${ordBuyerPhone || 'Registered Account'}\n• Delivery Address: ${locals.orderAddress || 'Uganda'}\n• Order Total: UGX ${Number(locals.orderTotal || 0).toLocaleString()}\n\nPlease confirm my order dispatch schedule.`;
+                    const ordWaUrl = `https://wa.me/256763480495?text=${encodeURIComponent(ordWaText)}`;
+                %>
+                <a href="<%= ordWaUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 26px; font-size: 14.5px; font-weight: 700; text-decoration: none; border-radius: 10px;">
+                    <span>💬 Chat on WhatsApp to Confirm Dispatch (0763480495)</span>
+                </a>
+            </div>
+        <% } %>
+
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 10px;">
+            <a href="orders.php" class="btn-primary" style="padding: 10px 20px; text-decoration: none;">📦 View in My Orders</a>
+            <a href="index.php" class="btn-secondary" style="padding: 10px 20px; text-decoration: none;">🛍️ Continue Shopping</a>
+        </div>
     <% } else { %>
         <% if (locals.errors && errors.length > 0) { %>
             <div class="alert alert-error">

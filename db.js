@@ -634,9 +634,11 @@ function formatProductRow(r) {
 function sanitizeWhatsAppNumber(phone) {
   if (!phone) return '256763480495';
   let cleaned = phone.toString().replace(/[^0-9]/g, '');
-  if (cleaned.startsWith('0') && cleaned.length === 10) {
+  if (cleaned.startsWith('00256')) {
+    cleaned = cleaned.substring(2);
+  } else if (cleaned.startsWith('0') && (cleaned.length === 10 || cleaned.length === 11)) {
     cleaned = '256' + cleaned.substring(1);
-  } else if (!cleaned.startsWith('256') && cleaned.length === 9) {
+  } else if (!cleaned.startsWith('256') && (cleaned.length === 9 || cleaned.length === 10)) {
     cleaned = '256' + cleaned;
   }
   return cleaned || '256763480495';

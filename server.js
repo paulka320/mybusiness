@@ -202,7 +202,22 @@ app.use(async (req, res, next) => {
       req.session.user_id = verified.id;
       req.session.user_name = verified.name;
       req.session.user_email = verified.email;
+      req.session.user_phone = verified.phone || '';
+      req.session.user_whatsapp = verified.whatsapp_number || verified.phone || '';
       req.session.is_admin = verified.is_admin ? 1 : 0;
+    }
+  }
+
+  // Ensure user phone & whatsapp are loaded into session
+  if (req.session && req.session.user_id && (!req.session.user_whatsapp || !req.session.user_phone)) {
+    try {
+      const u = await db.getUserById(req.session.user_id);
+      if (u) {
+        req.session.user_phone = u.phone || '';
+        req.session.user_whatsapp = u.whatsapp_number || u.phone || '';
+      }
+    } catch (e) {
+      // benign
     }
   }
 
@@ -210,6 +225,8 @@ app.use(async (req, res, next) => {
     id: req.session.user_id,
     name: req.session.user_name,
     email: req.session.user_email,
+    phone: req.session.user_phone || '',
+    whatsapp_number: req.session.user_whatsapp || req.session.user_phone || '',
     is_admin: req.session.is_admin
   } : null;
 
@@ -234,12 +251,16 @@ function setAuthSession(req, res, userPayload) {
   req.session.user_id = userPayload.id;
   req.session.user_name = userPayload.name;
   req.session.user_email = userPayload.email;
+  req.session.user_phone = userPayload.phone || '';
+  req.session.user_whatsapp = userPayload.whatsapp_number || userPayload.phone || '';
   req.session.is_admin = userPayload.is_admin ? 1 : 0;
 
   const token = createAuthToken({
     id: userPayload.id,
     name: userPayload.name,
     email: userPayload.email,
+    phone: userPayload.phone || '',
+    whatsapp_number: userPayload.whatsapp_number || userPayload.phone || '',
     is_admin: userPayload.is_admin ? 1 : 0
   });
 
@@ -411,14 +432,21 @@ app.get(['/product.php', '/product'], async (req, res) => {
     const targetWaNumber = '256763480495';
     
     // Include the buyer's registered credentials if logged in
-    const buyerName = req.session && req.session.user_name ? req.session.user_name : '';
-    const buyerPhone = req.session && req.session.user_phone ? req.session.user_phone : '';
-    let customerInfo = '';
-    if (buyerName) customerInfo += ` [Buyer: ${buyerName}`;
-    if (buyerPhone) customerInfo += ` | Contact: ${buyerPhone}`;
-    if (customerInfo) customerInfo += `]`;
+    const buyerName = req.session && req.session.user_name ? req.session.user_name : (res.locals.user ? res.locals.user.name : '');
+    const buyerPhone = (req.session && (req.session.user_whatsapp || req.session.user_phone)) || (res.locals.user ? (res.locals.user.whatsapp_number || res.locals.user.phone) : '');
+    
+    let senderPrefix = '';
+    if (buyerName && buyerPhone) {
+      senderPrefix = `Hello EasyMarket! I am ${buyerName} (messaging from my registered WhatsApp: ${buyerPhone}).\n\n`;
+    } else if (buyerName) {
+      senderPrefix = `Hello EasyMarket! I am ${buyerName}.\n\n`;
+    } else if (buyerPhone) {
+      senderPrefix = `Hello EasyMarket! (Messaging from my registered WhatsApp: ${buyerPhone}).\n\n`;
+    } else {
+      senderPrefix = `Hello EasyMarket!\n\n`;
+    }
 
-    const waMessageText = `Hello EasyMarket! I am inquiring about "${product.title}" (Listing #${product.id}, Price: UGX ${Number(product.price).toLocaleString()}, Location: ${product.location || 'Uganda'}). Is this product currently in stock and available for delivery/order?${customerInfo}`;
+    const waMessageText = `${senderPrefix}I am inquiring about "${product.title}" (Listing #${product.id}, Price: UGX ${Number(product.price).toLocaleString()}, Location: ${product.location || 'Uganda'}).\n\nIs this product currently in stock and available for delivery/order?`;
     const waMessage = encodeURIComponent(waMessageText);
     const waLink = `https://wa.me/${targetWaNumber}?text=${waMessage}`;
 
@@ -542,6 +570,10 @@ app.post(['/checkout.php', '/checkout'], async (req, res) => {
     res.render('checkout', {
       errors: [],
       success: `Order #${orderId} has been successfully placed! Our fulfillment team will contact you shortly.`,
+      orderId,
+      orderTotal: total,
+      orderAddress: address,
+      buyerPhone: phone,
       address: '',
       phone: '',
       payment_reference: ''
@@ -970,6 +1002,8 @@ app.post(['/login.php', '/login'], async (req, res) => {
     id: user.id,
     name: user.name,
     email: user.email,
+    phone: user.phone || '',
+    whatsapp_number: user.whatsapp_number || user.phone || '',
     is_admin: user.is_admin ? 1 : 0
   });
 
@@ -1062,6 +1096,8 @@ app.post(['/register.php', '/register'], async (req, res) => {
       id: newUser.id,
       name: name,
       email: email,
+      phone: phone,
+      whatsapp_number: whatsappNumber || phone,
       is_admin: 0
     });
 
