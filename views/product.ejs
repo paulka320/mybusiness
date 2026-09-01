@@ -172,9 +172,9 @@
                 </div>
                 <div class="contact-buttons-group">
                     <% if (locals.waLink) { %>
-                        <a href="<%= waLink %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp" id="btn-chat-whatsapp" title="Chat with seller on WhatsApp">
+                        <a href="<%= waLink %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp" id="btn-chat-whatsapp" title="Chat directly with seller on WhatsApp">
                             <span style="font-size: 18px;">💬</span>
-                            <span>Chat with Seller on WhatsApp</span>
+                            <span>Chat on WhatsApp (<%= product.whatsapp_number || product.phone || waNumber %>)</span>
                         </a>
                     <% } %>
 

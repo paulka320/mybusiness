@@ -575,7 +575,7 @@ async function initDatabase() {
         }
 
         const prodRes = await client.query(`
-          SELECT p.*, c.name as category_name, u.name as seller_name, u.email as seller_email, u.phone as seller_user_phone
+          SELECT p.*, c.name as category_name, u.name as seller_name, u.email as seller_email, u.phone as seller_user_phone, u.whatsapp_number as seller_user_whatsapp
           FROM products p 
           LEFT JOIN categories c ON p.category_id = c.id 
           LEFT JOIN users u ON p.seller_id = u.id
@@ -619,6 +619,7 @@ function formatProductRow(r) {
   } else if (rawImg) {
     finalImage = `/uploads/${rawImg}`;
   }
+  const sellerWa = r.whatsapp_number || r.seller_user_whatsapp || r.seller_user_phone || r.seller_phone || r.phone || '';
   return {
     ...r,
     image: finalImage,
@@ -626,22 +627,26 @@ function formatProductRow(r) {
     price: isNaN(parseFloat(r.price)) ? 0 : parseFloat(r.price),
     quantity: isNaN(parseInt(r.quantity, 10)) ? 1 : Math.max(0, parseInt(r.quantity, 10)),
     approved: (r.approved === true || r.approved === 1 || r.approved === '1' || r.approved == null || r.approved === 'true') ? 1 : 0,
-    category_name: r.category_name || 'General'
+    category_name: r.category_name || 'General',
+    whatsapp_number: sellerWa
   };
 }
 
-// Format Uganda WhatsApp phone number cleanly (e.g. "+256 701 234567" or "0763480495" -> "256763480495")
+// Format Uganda WhatsApp phone number cleanly (e.g. "+256 701 234567" or "0701234567" -> "256701234567")
 function sanitizeWhatsAppNumber(phone) {
-  if (!phone) return '256763480495';
+  if (!phone) return '';
   let cleaned = phone.toString().replace(/[^0-9]/g, '');
+  if (!cleaned) return '';
   if (cleaned.startsWith('00256')) {
     cleaned = cleaned.substring(2);
+  } else if (cleaned.startsWith('256')) {
+    // Keep 256...
   } else if (cleaned.startsWith('0') && (cleaned.length === 10 || cleaned.length === 11)) {
     cleaned = '256' + cleaned.substring(1);
-  } else if (!cleaned.startsWith('256') && (cleaned.length === 9 || cleaned.length === 10)) {
+  } else if (cleaned.length === 9) {
     cleaned = '256' + cleaned;
   }
-  return cleaned || '256763480495';
+  return cleaned;
 }
 
 const db = {
@@ -673,7 +678,7 @@ const db = {
   async getProducts(filterFn = null) {
     try {
       const res = await executePgQuery(`
-        SELECT p.*, c.name as category_name, u.name as seller_name, u.email as seller_email, u.phone as seller_user_phone
+        SELECT p.*, c.name as category_name, u.name as seller_name, u.email as seller_email, u.phone as seller_user_phone, u.whatsapp_number as seller_user_whatsapp
         FROM products p 
         LEFT JOIN categories c ON p.category_id = c.id 
         LEFT JOIN users u ON p.seller_id = u.id
@@ -712,7 +717,7 @@ const db = {
     if (!pId) return null;
     try {
       const res = await executePgQuery(`
-        SELECT p.*, c.name as category_name, u.name as seller_name, u.email as seller_email, u.phone as seller_user_phone
+        SELECT p.*, c.name as category_name, u.name as seller_name, u.email as seller_email, u.phone as seller_user_phone, u.whatsapp_number as seller_user_whatsapp
         FROM products p 
         LEFT JOIN categories c ON p.category_id = c.id 
         LEFT JOIN users u ON p.seller_id = u.id
@@ -821,7 +826,7 @@ const db = {
     const mainImageItem = (images && images.length > 0) ? images[0] : null;
     const mainImageFile = mainImageItem ? (typeof mainImageItem === 'object' ? mainImageItem.filename : mainImageItem) : 'phone-front.svg';
     const mainImageUrl = mainImageItem ? (typeof mainImageItem === 'object' ? (mainImageItem.dataUrl || mainImageItem.filename) : mainImageItem) : '/phone-front.svg';
-    const wa = sanitizeWhatsAppNumber(whatsapp_number || phone || '0763480495');
+    const wa = sanitizeWhatsAppNumber(whatsapp_number || phone || '');
     const parsedPrice = isNaN(parseFloat(price)) ? 0 : Math.max(0, parseFloat(price));
     const parsedQty = isNaN(parseInt(quantity, 10)) ? 1 : Math.max(1, parseInt(quantity, 10));
     let parsedCatId = parseInt(category_id, 10) || 1;

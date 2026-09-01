@@ -427,13 +427,23 @@ app.get(['/product.php', '/product'], async (req, res) => {
     // Pending price request if any
     const pendingPriceRequest = await db.getPendingPriceChangeRequestsForProduct(id);
 
-    // WhatsApp destination: Seller's direct WhatsApp/phone (Person B in 1-on-1 marketplace conversation)
-    const sellerWaRaw = product.whatsapp_number || product.seller_phone || product.phone || '0763480495';
-    const targetWaNumber = db.sanitizeWhatsAppNumber(sellerWaRaw);
+    // WhatsApp destination: Seller's direct registered WhatsApp or contact phone (Person B)
+    let sellerWaRaw = product.whatsapp_number || product.seller_user_whatsapp || product.seller_user_phone || product.seller_phone || product.phone;
+    if (!sellerWaRaw && product.seller_id) {
+      try {
+        const sellerUser = await db.findUserById(product.seller_id);
+        if (sellerUser) {
+          sellerWaRaw = sellerUser.whatsapp_number || sellerUser.phone;
+        }
+      } catch (e) {}
+    }
 
-    const waMessageText = `Hello! I am interested in buying "${product.title}" listed for UGX ${Number(product.price).toLocaleString()} on EasyMarket Uganda. Is this item still available for purchase?`;
-    const waMessage = encodeURIComponent(waMessageText);
-    const waLink = `https://wa.me/${targetWaNumber}?text=${waMessage}`;
+    const targetWaNumber = db.sanitizeWhatsAppNumber(sellerWaRaw);
+    let waLink = null;
+    if (targetWaNumber) {
+      const waMessageText = `Hello! I am interested in buying "${product.title}" listed for UGX ${Number(product.price).toLocaleString()} on EasyMarket Uganda. Is this item still available for purchase?`;
+      waLink = `https://wa.me/${targetWaNumber}?text=${encodeURIComponent(waMessageText)}`;
+    }
 
     res.render('product', {
       product,

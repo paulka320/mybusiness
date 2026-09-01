@@ -60,11 +60,11 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
             <div>
                 <label for="prod-phone">Contact Phone</label>
-                <input type="tel" id="prod-phone" name="phone" value="<%= locals.formData ? (formData.phone || '') : '' %>" placeholder="+256 701 234567" required>
+                <input type="tel" id="prod-phone" name="phone" value="<%= locals.formData ? (formData.phone || '') : (locals.user ? (locals.user.phone || locals.user.whatsapp_number || '') : '') %>" placeholder="+256 701 234567" required>
             </div>
             <div>
                 <label for="prod-wa">WhatsApp Number (For Direct Buyer Chats)</label>
-                <input type="tel" id="prod-wa" name="whatsapp_number" value="<%= locals.formData ? (formData.whatsapp_number || '') : '' %>" placeholder="256701234567">
+                <input type="tel" id="prod-wa" name="whatsapp_number" value="<%= locals.formData ? (formData.whatsapp_number || '') : (locals.user ? (locals.user.whatsapp_number || locals.user.phone || '') : '') %>" placeholder="e.g. 0701234567 or 256701234567">
             </div>
         </div>
 

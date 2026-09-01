@@ -118,16 +118,18 @@
                         <% } %>
 
                         <% 
-                            const isSupportChat = (!counterparty.id || counterparty.id === 2 || (counterparty.name && counterparty.name.toLowerCase().includes('support')) || (counterparty.name && counterparty.name.toLowerCase().includes('admin')));
-                            const targetWaNum = isSupportChat ? '256763480495' : db.sanitizeWhatsAppNumber(counterparty.whatsapp_number || counterparty.phone || '256763480495');
-                            const customerName = locals.user ? user.name : 'Customer';
+                            const isSupportChat = (!counterparty.id || counterparty.id === 1 || (counterparty.name && counterparty.name.toLowerCase().includes('support')) || (counterparty.name && counterparty.name.toLowerCase().includes('admin')));
+                            const counterpartyNum = counterparty.whatsapp_number || counterparty.phone || (isSupportChat ? '256763480495' : '');
+                            const targetWaNum = db.sanitizeWhatsAppNumber(counterpartyNum);
                             const itemName = locals.activeProduct ? ` regarding "${activeProduct.title}" (Item #${activeProduct.id})` : '';
                             const waText = `Hello ${counterparty.name || 'there'}! I am messaging you${itemName} on EasyMarket Uganda.`;
-                            const waUrl = `https://wa.me/${targetWaNum}?text=${encodeURIComponent(waText)}`;
+                            const waUrl = targetWaNum ? `https://wa.me/${targetWaNum}?text=${encodeURIComponent(waText)}` : null;
                         %>
-                        <a href="<%= waUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm" style="display: inline-flex; align-items: center; gap: 5px; text-decoration: none;">
-                            <span>💬 Open in WhatsApp</span>
-                        </a>
+                        <% if (waUrl) { %>
+                            <a href="<%= waUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm" style="display: inline-flex; align-items: center; gap: 5px; text-decoration: none;">
+                                <span>💬 WhatsApp <%= counterparty.name ? counterparty.name.split(' ')[0] : 'User' %> (<%= counterparty.whatsapp_number || counterparty.phone || targetWaNum %>)</span>
+                            </a>
+                        <% } %>
                     </div>
                 </div>
 

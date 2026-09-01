@@ -112,9 +112,20 @@
                                         Qty: <strong style="color: #1e293b;"><%= item.quantity %></strong> · Unit Price: <span style="color: #ff5e62; font-weight: 700;">UGX <%= Number(item.price).toLocaleString() %></span>
                                     </p>
                                 </div>
-                                <a href="messages.php?product_id=<%= item.product_id %>" class="btn-secondary order-item-chat-btn">
-                                    💬 Chat Seller
-                                </a>
+                                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                                    <a href="messages.php?product_id=<%= item.product_id %>" class="btn-secondary order-item-chat-btn">
+                                        💬 In-App Chat
+                                    </a>
+                                    <% 
+                                        const sellerWaNum = db.sanitizeWhatsAppNumber(item.whatsapp_number || item.seller_phone || item.phone || '');
+                                        if (sellerWaNum) {
+                                            const sellerWaUrl = `https://wa.me/${sellerWaNum}?text=${encodeURIComponent('Hello! I ordered "' + item.title + '" on EasyMarket (Order #' + order.id + '). I would like to inquire about delivery.')}`;
+                                    %>
+                                        <a href="<%= sellerWaUrl %>" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-sm" style="padding: 5px 9px; font-size: 11.5px; text-decoration: none;">
+                                            💬 WhatsApp Seller
+                                        </a>
+                                    <% } %>
+                                </div>
                             </div>
                         <% }); %>
                     </div>
