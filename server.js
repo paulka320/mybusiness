@@ -6,583 +6,338 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
-
-const {
-  adminRegistrationCode,
-  getCookieOptions,
-  isProduction,
-  port: PORT,
-  sessionSecret: SESSION_SECRET,
-  verifyHmacToken
-} = require('./config');
-
 const { db, initDatabase } = require('./db');
 const { validateEmailAuthenticity } = require('./emailValidator');
 
 const app = express();
+const PORT = 3000;
+const SESSION_SECRET = process.env.SESSION_SECRET || 'easymarket_secret_key_2026_supersecure';
 
-app.set('trust proxy', isProduction ? 1 : false);
+// Trust proxy for Cloud Run and reverse proxies
+app.set('trust proxy', 1);
 
+// Ensure upload directory exists
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
-
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
 // ----------------------------------------------------
-// Security middleware
+// Security Middleware & Hardening
 // ----------------------------------------------------
 
-app.disable('x-powered-by');
-
+// 1. Security Headers (defense against MIME sniffing, clickjacking, XSS)
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-
-  if (isProduction) {
-    res.setHeader(
-      'Strict-Transport-Security',
-      'max-age=31536000; includeSubDomains'
-    );
-  }
-
+  res.setHeader('X-Download-Options', 'noopen');
   next();
 });
 
-// ----------------------------------------------------
-// Login rate limiting
-// ----------------------------------------------------
-
+// 2. In-Memory Rate Limiter for Login/Auth (anti-brute-force defense)
 const loginAttempts = new Map();
-const RATE_LIMIT_WINDOW = 5 * 60 * 1000;
+const RATE_LIMIT_WINDOW = 5 * 60 * 1000; // 5 minutes
 const MAX_FAILED_ATTEMPTS = 15;
-
-function getClientIp(req) {
-  return String(
-    req.ip ||
-    req.headers['x-forwarded-for'] ||
-    req.socket?.remoteAddress ||
-    'unknown'
-  ).split(',')[0].trim();
-}
 
 function checkRateLimit(ip) {
   const now = Date.now();
   const record = loginAttempts.get(ip);
-
-  if (!record) {
-    return true;
-  }
-
+  if (!record) return true;
   if (now - record.firstAttempt > RATE_LIMIT_WINDOW) {
     loginAttempts.delete(ip);
     return true;
   }
-
   return record.count < MAX_FAILED_ATTEMPTS;
 }
 
 function recordFailedLogin(ip) {
   const now = Date.now();
   const record = loginAttempts.get(ip);
-
-  if (!record || now - record.firstAttempt > RATE_LIMIT_WINDOW) {
-    loginAttempts.set(ip, {
-      count: 1,
-      firstAttempt: now
-    });
-    return;
+  if (!record || (now - record.firstAttempt > RATE_LIMIT_WINDOW)) {
+    loginAttempts.set(ip, { count: 1, firstAttempt: now });
+  } else {
+    record.count++;
   }
-
-  record.count += 1;
 }
 
 function resetRateLimit(ip) {
   loginAttempts.delete(ip);
 }
 
-// Remove expired rate-limit records periodically.
-const rateLimitCleanup = setInterval(() => {
-  const now = Date.now();
-
-  for (const [ip, record] of loginAttempts.entries()) {
-    if (now - record.firstAttempt > RATE_LIMIT_WINDOW) {
-      loginAttempts.delete(ip);
-    }
-  }
-}, RATE_LIMIT_WINDOW);
-
-rateLimitCleanup.unref();
-
-// ----------------------------------------------------
-// Secure image uploads
-// ----------------------------------------------------
-
+// 3. Multer Secure File Uploads
 const storage = multer.diskStorage({
-  destination(req, file, callback) {
-    callback(null, uploadsDir);
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
   },
-
-  filename(req, file, callback) {
-    const extension = path.extname(file.originalname).toLowerCase();
-    const safeExtension = /^[.][a-z0-9]+$/.test(extension)
-      ? extension
-      : '.bin';
-
-    const randomName = crypto.randomBytes(16).toString('hex');
-    callback(null, `${Date.now()}_${randomName}${safeExtension}`);
+  filename: function (req, file, cb) {
+    const randomHex = crypto.randomBytes(8).toString('hex');
+    const safeExt = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
+    cb(null, `${Date.now()}_${randomHex}${safeExt}`);
   }
 });
 
 const upload = multer({
-  storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024,
-    files: 20,
-    fields: 50
-  },
-
-  fileFilter(req, file, callback) {
-    const extension = path
-      .extname(file.originalname)
-      .toLowerCase()
-      .replace('.', '');
-
-    const allowedExtensions = new Set([
-      'jpg',
-      'jpeg',
-      'png',
-      'webp',
-      'svg'
-    ]);
-
-    if (!allowedExtensions.has(extension)) {
-      return callback(
-        new Error('Invalid image format. Allowed formats: JPG, PNG, WEBP, SVG.')
-      );
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max per image
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase().replace('.', '');
+    const allowed = ['jpg', 'jpeg', 'png', 'webp', 'svg'];
+    if (allowed.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid image format. Allowed formats: JPG, PNG, WEBP, SVG.'));
     }
-
-    callback(null, true);
   }
 });
 
-// ----------------------------------------------------
-// Application configuration
-// ----------------------------------------------------
-
+// View Engine
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-app.use(express.urlencoded({
-  extended: true,
-  limit: '10mb'
-}));
-
-app.use(express.json({
-  limit: '10mb'
-}));
-
+// Body & Cookie Parsers
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser(SESSION_SECRET));
-
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(uploadsDir));
 
+// Image serving route with automatic Supabase Cloud recovery & SVG fallback
+app.get(['/uploads/:filename', '/public/uploads/:filename'], async (req, res) => {
+  const filename = path.basename(req.params.filename || '');
+  const filePath = path.join(uploadsDir, filename);
+
+  // 1. If file exists physically on disk, serve it immediately
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+
+  // 2. If file was cleared upon container restart, recover Base64 data from Supabase Cloud DB!
+  try {
+    const dataUrl = await db.getImageDataByFilename(filename);
+    if (dataUrl && dataUrl.startsWith('data:')) {
+      const parts = dataUrl.split(',');
+      if (parts.length === 2) {
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+        const buffer = Buffer.from(parts[1], 'base64');
+        try { fs.writeFileSync(filePath, buffer); } catch {}
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.send(buffer);
+      }
+    }
+  } catch (err) {
+    // Image restore fallback handled below
+  }
+
+  // 3. Clean SVG fallback if image is not yet uploaded or placeholder
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  const fallbackSvg = path.join(__dirname, 'public', 'phone-front.svg');
+  if (fs.existsSync(fallbackSvg)) {
+    return res.sendFile(fallbackSvg);
+  }
+  return res.status(404).send('Image placeholder');
+});
+
+// URL Normalizer: Fix any accidental double relative paths like /admin_dashboard.php/admin_dashboard.php
+app.use((req, res, next) => {
+  if (req.originalUrl && req.originalUrl.includes('admin_dashboard.php/admin_dashboard.php')) {
+    const cleaned = req.originalUrl.replace(/admin_dashboard\.php\/admin_dashboard\.php/g, 'admin_dashboard.php');
+    return res.redirect(cleaned);
+  }
+  next();
+});
+
+// Express Session configured for iframes and proxy compatibility
 app.use(session({
   name: 'easymarket_sid',
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  proxy: isProduction,
-  cookie: getCookieOptions()
+  proxy: true,
+  cookie: {
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    sameSite: 'none',
+    secure: true
+  }
 }));
 
-// ----------------------------------------------------
-// Authentication helpers
-// ----------------------------------------------------
-
+// Signed Auth Token Generator / Verifier
 function createAuthToken(userData) {
-  const payload = Buffer
-    .from(JSON.stringify(userData))
-    .toString('base64url');
-
-  const signature = crypto
-    .createHmac('sha256', SESSION_SECRET)
-    .update(payload)
-    .digest('base64url');
-
+  const payload = Buffer.from(JSON.stringify(userData)).toString('base64url');
+  const signature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
   return `${payload}.${signature}`;
 }
 
-function setAuthSession(req, res, userPayload) {
-  req.session.user_id = userPayload.id;
-  req.session.user_name = userPayload.name || '';
-  req.session.user_email = userPayload.email || '';
-  req.session.user_phone = userPayload.phone || '';
-  req.session.user_whatsapp =
-    userPayload.whatsapp_number || userPayload.phone || '';
-  req.session.is_admin = userPayload.is_admin ? 1 : 0;
-
-  const token = createAuthToken({
-    id: userPayload.id,
-    name: userPayload.name || '',
-    email: userPayload.email || '',
-    phone: userPayload.phone || '',
-    whatsapp_number:
-      userPayload.whatsapp_number || userPayload.phone || '',
-    is_admin: userPayload.is_admin ? 1 : 0
-  });
-
-  res.cookie('em_token', token, getCookieOptions());
-}
-
-function clearAuthSession(req, res, callback) {
-  const cookieOptions = getCookieOptions();
-
-  if (!req.session) {
-    res.clearCookie('easymarket_sid', cookieOptions);
-    res.clearCookie('em_token', cookieOptions);
-    callback?.();
-    return;
-  }
-
-  req.session.destroy((error) => {
-    if (error) {
-      console.error('Session destroy error:', error.message);
-    }
-
-    res.clearCookie('easymarket_sid', cookieOptions);
-    res.clearCookie('em_token', cookieOptions);
-    callback?.(error);
-  });
-}
-// ----------------------------------------------------
-// Image recovery route
-// ----------------------------------------------------
-
-app.get(
-  ['/uploads/:filename', '/public/uploads/:filename'],
-  async (req, res, next) => {
-    const filename = path.basename(String(req.params.filename || ''));
-
-    if (!filename) {
-      return res.status(404).send('Image not found');
-    }
-
-    const filePath = path.join(uploadsDir, filename);
-
-    if (fs.existsSync(filePath)) {
-      return res.sendFile(filePath);
-    }
-
+function verifyAuthToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [payload, signature] = parts;
+  const expectedSignature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
     try {
-      const dataUrl = await db.getImageDataByFilename(filename);
-
-      if (typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
-        const separatorIndex = dataUrl.indexOf(',');
-
-        if (separatorIndex > 0) {
-          const metadata = dataUrl.slice(0, separatorIndex);
-          const encodedData = dataUrl.slice(separatorIndex + 1);
-          const mimeMatch = metadata.match(/^data:([^;]+);base64$/);
-
-          if (mimeMatch && encodedData) {
-            const imageBuffer = Buffer.from(encodedData, 'base64');
-
-            if (imageBuffer.length > 0) {
-              try {
-                fs.writeFileSync(filePath, imageBuffer);
-              } catch (writeError) {
-                console.warn(
-                  '[IMAGE RESTORE] Could not cache image:',
-                  writeError.message
-                );
-              }
-
-              res.setHeader('Content-Type', mimeMatch[1]);
-              res.setHeader('Cache-Control', 'public, max-age=86400');
-              return res.send(imageBuffer);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.warn(
-        '[IMAGE RESTORE] Database lookup failed:',
-        error.message
-      );
+      return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    } catch {
+      return null;
     }
-
-    const fallbackSvg = path.join(__dirname, 'public', 'phone-front.svg');
-
-    if (fs.existsSync(fallbackSvg)) {
-      res.setHeader('Content-Type', 'image/svg+xml');
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      return res.sendFile(fallbackSvg);
-    }
-
-    next();
   }
-);
+  return null;
+}
 
-// ----------------------------------------------------
-// Legacy URL normalization
-// ----------------------------------------------------
-
-app.use((req, res, next) => {
-  const originalUrl = String(req.originalUrl || '');
-
-  if (originalUrl.includes('admin_dashboard.php/admin_dashboard.php')) {
-    const cleanedUrl = originalUrl.replace(
-      /admin_dashboard\.php\/admin_dashboard\.php/g,
-      'admin_dashboard.php'
-    );
-
-    return res.redirect(302, cleanedUrl);
-  }
-
-  next();
-});
-
-// ----------------------------------------------------
-// Global view/authentication context
-// ----------------------------------------------------
-
+// Global Auth Context & Notification Badge Middleware
 app.use(async (req, res, next) => {
   res.locals.db = db;
   res.locals.sanitizeWhatsAppNumber = db.sanitizeWhatsAppNumber;
   res.locals.currentPath = req.path || '';
   res.locals.originalUrl = req.originalUrl || '';
 
-  try {
-    if (!req.session?.user_id) {
-      const token =
-        req.cookies?.em_token ||
-        req.headers['x-auth-token'];
-
-      const verified = verifyHmacToken(token);
-
-      if (verified && Number.isInteger(Number(verified.id))) {
-        req.session.user_id = Number(verified.id);
-        req.session.user_name = verified.name || '';
-        req.session.user_email = verified.email || '';
-        req.session.user_phone = verified.phone || '';
-        req.session.user_whatsapp =
-          verified.whatsapp_number || verified.phone || '';
-        req.session.is_admin = verified.is_admin ? 1 : 0;
-      }
+  if (!req.session || !req.session.user_id) {
+    const token = req.cookies.em_token || req.headers['x-auth-token'];
+    const verified = verifyAuthToken(token);
+    if (verified && verified.id) {
+      req.session.user_id = verified.id;
+      req.session.user_name = verified.name;
+      req.session.user_email = verified.email;
+      req.session.user_phone = verified.phone || '';
+      req.session.user_whatsapp = verified.whatsapp_number || verified.phone || '';
+      req.session.is_admin = verified.is_admin ? 1 : 0;
     }
-
-    if (
-      req.session?.user_id &&
-      (!req.session.user_phone || !req.session.user_whatsapp)
-    ) {
-      const user = await db.findUserById(req.session.user_id);
-
-      if (user) {
-        req.session.user_name = user.name || req.session.user_name || '';
-        req.session.user_email = user.email || req.session.user_email || '';
-        req.session.user_phone = user.phone || '';
-        req.session.user_whatsapp =
-          user.whatsapp_number || user.phone || '';
-        req.session.is_admin = user.is_admin ? 1 : 0;
-      }
-    }
-  } catch (error) {
-    console.warn('Authentication context warning:', error.message);
   }
 
-  res.locals.user = req.session?.user_id
-    ? {
-        id: req.session.user_id,
-        name: req.session.user_name || '',
-        email: req.session.user_email || '',
-        phone: req.session.user_phone || '',
-        whatsapp_number:
-          req.session.user_whatsapp ||
-          req.session.user_phone ||
-          '',
-        is_admin: req.session.is_admin ? 1 : 0
+  // Ensure user phone & whatsapp are loaded into session
+  if (req.session && req.session.user_id && (!req.session.user_whatsapp || !req.session.user_phone)) {
+    try {
+      const u = await db.getUserById(req.session.user_id);
+      if (u) {
+        req.session.user_phone = u.phone || '';
+        req.session.user_whatsapp = u.whatsapp_number || u.phone || '';
       }
-    : null;
+    } catch (e) {
+      // benign
+    }
+  }
+
+  res.locals.user = (req.session && req.session.user_id) ? {
+    id: req.session.user_id,
+    name: req.session.user_name,
+    email: req.session.user_email,
+    phone: req.session.user_phone || '',
+    whatsapp_number: req.session.user_whatsapp || req.session.user_phone || '',
+    is_admin: req.session.is_admin
+  } : null;
 
   res.locals.unreadNotifsCount = 0;
   res.locals.unreadMsgsCount = 0;
 
   if (res.locals.user) {
     try {
-      const notifications = await db.getNotificationsByUser(
-        res.locals.user.id
-      );
-
-      res.locals.unreadNotifsCount = notifications.filter(
-        notification => !notification.is_read
-      ).length;
-
-      const conversations = await db.getConversationsForUser(
-        res.locals.user.id
-      );
-
-      res.locals.unreadMsgsCount = conversations.reduce(
-        (total, conversation) =>
-          total + Number(conversation.unreadCount || 0),
-        0
-      );
-    } catch (error) {
-      console.warn('Notification context warning:', error.message);
+      const notifs = await db.getNotificationsByUser(res.locals.user.id);
+      res.locals.unreadNotifsCount = notifs.filter(n => !n.is_read).length;
+      const convs = await db.getConversationsForUser(res.locals.user.id);
+      res.locals.unreadMsgsCount = convs.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+    } catch (e) {
+      // benign
     }
   }
 
   next();
 });
 
-// ----------------------------------------------------
-// Shared helpers
-// ----------------------------------------------------
+function setAuthSession(req, res, userPayload) {
+  req.session.user_id = userPayload.id;
+  req.session.user_name = userPayload.name;
+  req.session.user_email = userPayload.email;
+  req.session.user_phone = userPayload.phone || '';
+  req.session.user_whatsapp = userPayload.whatsapp_number || userPayload.phone || '';
+  req.session.is_admin = userPayload.is_admin ? 1 : 0;
 
-function isAuthenticated(req) {
-  return Boolean(req.session?.user_id);
-}
+  const token = createAuthToken({
+    id: userPayload.id,
+    name: userPayload.name,
+    email: userPayload.email,
+    phone: userPayload.phone || '',
+    whatsapp_number: userPayload.whatsapp_number || userPayload.phone || '',
+    is_admin: userPayload.is_admin ? 1 : 0
+  });
 
-function isAdministrator(req) {
-  return Boolean(
-    req.session?.user_id &&
-    Number(req.session.is_admin) === 1
-  );
-}
-
-function safeReturnPath(value, fallback = '/index.php') {
-  if (typeof value !== 'string') {
-    return fallback;
-  }
-
-  const trimmed = value.trim();
-
-  if (
-    !trimmed ||
-    trimmed.startsWith('//') ||
-    trimmed.startsWith('http://') ||
-    trimmed.startsWith('https://') ||
-    !trimmed.startsWith('/')
-  ) {
-    return fallback;
-  }
-
-  return trimmed;
-}
-
-function parsePositiveInteger(value) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-}
-
-function parseNonNegativeInteger(value) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
-}
-
-function renderCheckout(res, data = {}) {
-  return res.render('checkout', {
-    errors: [],
-    success: null,
-    address: '',
-    phone: '',
-    payment_reference: '',
-    ...data
+  res.cookie('em_token', token, {
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    sameSite: 'none',
+    secure: true
   });
 }
 
-function renderLogin(res, data = {}) {
-  return res.render('login', {
-    errors: [],
-    email: '',
-    returnTo: '',
-    ...data
-  });
-}
-
-function renderAdminLogin(res, data = {}) {
-  return res.render('admin_login', {
-    errors: [],
-    email: '',
-    ...data
-  });
+function clearAuthSession(req, res) {
+  req.session.destroy(() => {});
+  res.clearCookie('easymarket_sid', { sameSite: 'none', secure: true });
+  res.clearCookie('em_token', { sameSite: 'none', secure: true });
 }
 
 // ----------------------------------------------------
-// Home page
+// CORE MARKETPLACE ROUTES
 // ----------------------------------------------------
 
+// 1. Home / Index
 app.get(['/', '/index.php', '/index'], async (req, res) => {
   try {
     const categories = await db.getCategories();
-    const search = String(req.query.search || '').trim().toLowerCase();
-    const categorySelected =
-      parsePositiveInteger(req.query.category_id) || 0;
-    const minPrice = Math.max(0, Number(req.query.price_min) || 0);
-    const maxPrice = Math.max(0, Number(req.query.price_max) || 0);
-    const sort = String(req.query.sort || 'newest');
+    const search = (req.query.search || '').trim().toLowerCase();
+    const categorySelected = parseInt(req.query.category_id, 10) || 0;
+    const minPrice = parseFloat(req.query.price_min) || 0;
+    const maxPrice = parseFloat(req.query.price_max) || 0;
+    const sort = req.query.sort || 'newest';
 
-    const isNewlyRegistered = Boolean(req.session?.justRegistered);
-
-    if (req.session?.justRegistered) {
+    const isNewlyRegistered = req.session && req.session.justRegistered;
+    if (isNewlyRegistered) {
       delete req.session.justRegistered;
     }
 
-    let products = await db.getProducts(product =>
-      (product.approved === 1 ||
-        product.approved === true ||
-        product.approved == null) &&
-      Number(product.quantity || 0) > 0
-    );
+    let filtered = await db.getProducts(p => p.approved === 1 || p.approved === true || p.approved == null);
 
     if (search) {
-      products = products.filter(product =>
-        String(product.title || '').toLowerCase().includes(search) ||
-        String(product.description || '').toLowerCase().includes(search) ||
-        String(product.location || '').toLowerCase().includes(search)
+      filtered = filtered.filter(p =>
+        (p.title && p.title.toLowerCase().includes(search)) ||
+        (p.description && p.description.toLowerCase().includes(search)) ||
+        (p.location && p.location.toLowerCase().includes(search))
       );
     }
 
     if (categorySelected > 0) {
-      products = products.filter(
-        product => Number(product.category_id) === categorySelected
-      );
+      filtered = filtered.filter(p => p.category_id === categorySelected);
     }
 
     if (minPrice > 0) {
-      products = products.filter(
-        product => Number(product.price) >= minPrice
-      );
+      filtered = filtered.filter(p => p.price >= minPrice);
     }
 
     if (maxPrice > 0 && maxPrice >= minPrice) {
-      products = products.filter(
-        product => Number(product.price) <= maxPrice
-      );
+      filtered = filtered.filter(p => p.price <= maxPrice);
     }
 
     switch (sort) {
       case 'price_asc':
-        products.sort((a, b) => a.price - b.price);
+        filtered.sort((a, b) => a.price - b.price);
         break;
       case 'price_desc':
-        products.sort((a, b) => b.price - a.price);
+        filtered.sort((a, b) => b.price - a.price);
         break;
       case 'title':
-        products.sort((a, b) =>
-          String(a.title || '').localeCompare(String(b.title || ''))
-        );
+        filtered.sort((a, b) => a.title.localeCompare(b.title));
         break;
+      case 'newest':
       default:
-        products.sort((a, b) => Number(b.id) - Number(a.id));
+        filtered.sort((a, b) => b.id - a.id);
         break;
     }
 
-    return res.render('index', {
+    res.render('index', {
       categories,
-      products,
+      products: filtered,
       search: req.query.search || '',
       categorySelected,
       minPrice,
@@ -590,276 +345,214 @@ app.get(['/', '/index.php', '/index'], async (req, res) => {
       sort,
       isNewlyRegistered
     });
-  } catch (error) {
-    console.error('Error loading index:', error);
-    return res.status(500).send('Internal Server Error');
+  } catch (err) {
+    console.error('Error loading index:', err);
+    res.status(500).send('Internal Server Error');
   }
 });
-// ----------------------------------------------------
-// Category page
-// ----------------------------------------------------
 
+// 2. Category page
 app.get(['/category.php', '/category'], async (req, res) => {
   try {
     const categories = await db.getCategories();
-    const categoryId = parsePositiveInteger(req.query.id);
-    const category = categories.find(
-      item => Number(item.id) === categoryId
-    );
-
+    const id = parseInt(req.query.id, 10) || 0;
+    const category = categories.find(c => c.id === id);
     if (!category) {
       return res.redirect('/index.php');
     }
 
-    const search = String(req.query.search || '').trim().toLowerCase();
-    const sort = String(req.query.sort || 'newest');
+    const search = (req.query.search || '').trim().toLowerCase();
+    const sort = req.query.sort || 'newest';
 
-    let products = await db.getProducts(product =>
-      Number(product.category_id) === categoryId &&
-      (product.approved === 1 ||
-        product.approved === true ||
-        product.approved == null) &&
-      Number(product.quantity || 0) > 0
-    );
+    let filtered = await db.getProducts(p => p.category_id === id && (p.approved === 1 || p.approved === true || p.approved == null));
 
     if (search) {
-      products = products.filter(product =>
-        String(product.title || '').toLowerCase().includes(search) ||
-        String(product.description || '').toLowerCase().includes(search) ||
-        String(product.location || '').toLowerCase().includes(search)
+      filtered = filtered.filter(p =>
+        (p.title && p.title.toLowerCase().includes(search)) ||
+        (p.description && p.description.toLowerCase().includes(search)) ||
+        (p.location && p.location.toLowerCase().includes(search))
       );
     }
 
     switch (sort) {
       case 'price_asc':
-        products.sort((a, b) => a.price - b.price);
+        filtered.sort((a, b) => a.price - b.price);
         break;
       case 'price_desc':
-        products.sort((a, b) => b.price - a.price);
+        filtered.sort((a, b) => b.price - a.price);
         break;
       case 'title':
-        products.sort((a, b) =>
-          String(a.title || '').localeCompare(String(b.title || ''))
-        );
+        filtered.sort((a, b) => a.title.localeCompare(b.title));
         break;
+      case 'newest':
       default:
-        products.sort((a, b) => Number(b.id) - Number(a.id));
+        filtered.sort((a, b) => b.id - a.id);
         break;
     }
 
-    return res.render('category', {
+    res.render('category', {
       category,
       categories,
-      products,
+      products: filtered,
       search: req.query.search || '',
       sort
     });
-  } catch (error) {
-    console.error('Error loading category:', error);
-    return res.status(500).send('Internal Server Error');
+  } catch (err) {
+    console.error('Error loading category:', err);
+    res.status(500).send('Internal Server Error');
   }
 });
 
-// ----------------------------------------------------
-// Product details
-// ----------------------------------------------------
-
+// 3. Product Details
 app.get(['/product.php', '/product'], async (req, res) => {
   try {
-    const productId = parsePositiveInteger(req.query.id);
-    const product = await db.getProductById(productId);
-
+    const id = parseInt(req.query.id, 10) || 0;
+    const product = await db.getProductById(id);
     if (!product) {
       return res.redirect('/index.php');
     }
 
-    const userId = req.session?.user_id || null;
-    const isAdmin = isAdministrator(req);
-    const isOwner =
-      Boolean(userId) &&
-      Number(product.seller_id) === Number(userId);
+    const userId = req.session ? req.session.user_id : null;
+    const isAdmin = req.session && req.session.is_admin === 1;
+    const isOwner = !!(userId && product.seller_id === userId);
 
-    if (
-      (Number(product.approved) !== 1 ||
-        Number(product.quantity || 0) <= 0) &&
-      !isAdmin &&
-      !isOwner
-    ) {
+    // If product is unapproved or sold out (0 stock), only allow admin or product owner to view
+    if ((product.approved !== 1 || product.quantity <= 0) && !isAdmin && !isOwner) {
       return res.redirect('/index.php');
     }
 
-    const images = await db.getProductImages(productId);
+    const images = await db.getProductImages(id);
+    const similar = (await db.getProducts(p => p.category_id === product.category_id && p.id !== id && p.approved === 1 && p.quantity > 0)).slice(0, 4);
 
-    const similar = (
-      await db.getProducts(candidate =>
-        Number(candidate.category_id) === Number(product.category_id) &&
-        Number(candidate.id) !== Number(product.id) &&
-        Number(candidate.approved) === 1 &&
-        Number(candidate.quantity || 0) > 0
-      )
-    ).slice(0, 4);
+    // Pending price request if any
+    const pendingPriceRequest = await db.getPendingPriceChangeRequestsForProduct(id);
 
-    const pendingPriceRequest =
-      await db.getPendingPriceChangeRequestsForProduct(productId);
-
-    let sellerPhone =
-      product.whatsapp_number ||
-      product.seller_user_whatsapp ||
-      product.seller_user_phone ||
-      product.seller_phone ||
-      product.phone ||
-      '';
-
-    if (!sellerPhone && product.seller_id) {
-      const seller = await db.findUserById(product.seller_id);
-
-      if (seller) {
-        sellerPhone = seller.whatsapp_number || seller.phone || '';
-      }
+    // WhatsApp destination: Seller's direct registered WhatsApp or contact phone (Person B)
+    let sellerWaRaw = product.whatsapp_number || product.seller_user_whatsapp || product.seller_user_phone || product.seller_phone || product.phone;
+    if (!sellerWaRaw && product.seller_id) {
+      try {
+        const sellerUser = await db.findUserById(product.seller_id);
+        if (sellerUser) {
+          sellerWaRaw = sellerUser.whatsapp_number || sellerUser.phone;
+        }
+      } catch (e) {}
     }
 
-    const whatsappNumber = db.sanitizeWhatsAppNumber(sellerPhone);
-    const whatsappLink = whatsappNumber
-      ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
-          `Hello! I am interested in buying "${product.title}" ` +
-          `listed for UGX ${Number(product.price).toLocaleString()} ` +
-          'on EasyMarket Uganda. Is this item still available?'
-        )}`
-      : null;
+    const targetWaNumber = db.sanitizeWhatsAppNumber(sellerWaRaw);
+    let waLink = null;
+    if (targetWaNumber) {
+      const waMessageText = `Hello! I am interested in buying "${product.title}" listed for UGX ${Number(product.price).toLocaleString()} on EasyMarket Uganda. Is this item still available for purchase?`;
+      waLink = `https://wa.me/${targetWaNumber}?text=${encodeURIComponent(waMessageText)}`;
+    }
 
-    return res.render('product', {
+    res.render('product', {
       product,
       images,
       similar,
-      waLink: whatsappLink,
-      waNumber: whatsappNumber,
+      waLink,
+      waNumber: targetWaNumber,
       isOwner,
       isAdmin,
       pendingPriceRequest
     });
-  } catch (error) {
-    console.error('Error loading product:', error);
-    return res.status(500).send('Internal Server Error');
+  } catch (err) {
+    console.error('Error loading product:', err);
+    res.status(500).send('Internal Server Error');
   }
 });
 
-// ----------------------------------------------------
-// Cart and checkout
-// ----------------------------------------------------
-
+// 4. Cart
 app.get(['/cart.php', '/cart'], (req, res) => {
-  return res.render('cart');
+  res.render('cart');
 });
 
+// 5. Checkout
 app.get(['/checkout.php', '/checkout'], (req, res) => {
-  if (!isAuthenticated(req)) {
+  if (!req.session || !req.session.user_id) {
     return res.redirect('/login.php?return=/checkout.php');
   }
-
-  return renderCheckout(res);
+  res.render('checkout', {
+    errors: [],
+    success: null,
+    address: '',
+    phone: '',
+    payment_reference: ''
+  });
 });
-
-function parseCart(cartJson) {
-  if (typeof cartJson !== 'string' || !cartJson.trim()) {
-    throw new Error('Your cart is empty.');
-  }
-
-  const parsed = JSON.parse(cartJson);
-
-  if (!Array.isArray(parsed) || parsed.length === 0) {
-    throw new Error('Your cart is empty.');
-  }
-
-  if (parsed.length > 100) {
-    throw new Error('Your cart contains too many items.');
-  }
-
-  return parsed;
-}
 
 app.post(['/checkout.php', '/checkout'], async (req, res) => {
-  if (!isAuthenticated(req)) {
+  if (!req.session || !req.session.user_id) {
     return res.redirect('/login.php?return=/checkout.php');
   }
 
-  const address = String(req.body.address || '').trim();
-  const phone = String(req.body.phone || '').trim();
-  const paymentReference =
-    String(req.body.payment_reference || '').trim();
+  const cartJson = (req.body.cart_data || '').trim();
+  const address = (req.body.address || '').trim();
+  const phone = (req.body.phone || '').trim();
+  const paymentReference = (req.body.payment_reference || '').trim();
 
   const errors = [];
+  if (!cartJson) errors.push('Your cart is empty. Add items before checking out.');
+  if (!address) errors.push('Delivery address is required.');
+  if (!phone) errors.push('A phone number is required.');
+
   let cartItems = [];
-
-  if (!address) {
-    errors.push('Delivery address is required.');
-  }
-
-  if (!phone) {
-    errors.push('A phone number is required.');
-  }
-
   try {
-    cartItems = parseCart(req.body.cart_data);
-  } catch (error) {
-    errors.push(error.message);
+    cartItems = JSON.parse(cartJson);
+  } catch {
+    errors.push('Invalid cart data. Please refresh the page and try again.');
   }
 
-  const validatedItems = [];
+  if (!Array.isArray(cartItems) || cartItems.length === 0) {
+    if (errors.length === 0) errors.push('Your cart is empty. Add items before checking out.');
+  }
+
   let total = 0;
+  const validatedItems = [];
 
   if (errors.length === 0) {
     for (const item of cartItems) {
-      const productId = parsePositiveInteger(item?.id);
-      const quantity = parsePositiveInteger(item?.quantity);
+      const productId = parseInt(item.id, 10) || 0;
+      const quantity = parseInt(item.quantity, 10) || 0;
 
-      if (!productId || !quantity) {
-        errors.push('Cart contains an invalid product or quantity.');
+      if (productId <= 0 || quantity <= 0) {
+        errors.push('Cart contains invalid product quantities or references.');
         break;
       }
 
-      const product = await db.getProductById(productId);
-
-      if (!product || Number(product.approved) !== 1) {
-        errors.push('A product in your cart is no longer available.');
+      const prod = await db.getProductById(productId);
+      if (!prod || prod.approved !== 1) {
+        errors.push('One of the products in your cart is no longer available.');
         break;
       }
 
-      if (quantity > Number(product.quantity || 0)) {
-        errors.push(
-          `Only ${product.quantity} unit(s) of ` +
-          `"${product.title}" are available.`
-        );
+      if (quantity > prod.quantity) {
+        errors.push(`Only ${prod.quantity} unit(s) of "${prod.title}" are available.`);
         break;
       }
 
-      const price = Number.parseFloat(product.price);
-
-      if (!Number.isFinite(price) || price <= 0) {
-        errors.push(`Product "${product.title}" has an invalid price.`);
-        break;
-      }
-
+      const price = parseFloat(prod.price);
       total += price * quantity;
-
       validatedItems.push({
         product_id: productId,
-        title: product.title,
-        price,
-        quantity,
-        image: String(item.image || product.image || '').trim()
+        title: prod.title,
+        price: price,
+        quantity: quantity,
+        image: (item.image || prod.image || '').trim()
       });
     }
   }
 
   if (errors.length > 0) {
-    return renderCheckout(res, {
+    return res.render('checkout', {
       errors,
+      success: null,
       address,
       phone,
       payment_reference: paymentReference
     });
   }
-    try {
+
+  try {
     const orderId = await db.createOrder({
       userId: req.session.user_id,
       total,
@@ -869,11 +562,9 @@ app.post(['/checkout.php', '/checkout'], async (req, res) => {
       items: validatedItems
     });
 
-    return renderCheckout(res, {
+    res.render('checkout', {
       errors: [],
-      success:
-        `Order #${orderId} has been successfully placed! ` +
-        'Our fulfillment team will contact you shortly.',
+      success: `Order #${orderId} has been successfully placed! Our fulfillment team will contact you shortly.`,
       orderId,
       orderTotal: total,
       orderAddress: address,
@@ -882,23 +573,11 @@ app.post(['/checkout.php', '/checkout'], async (req, res) => {
       phone: '',
       payment_reference: ''
     });
-  } catch (error) {
-    if (error.code === 'INSUFFICIENT_STOCK') {
-      return renderCheckout(res, {
-        errors: [
-          'One or more products sold out while your order was being processed. ' +
-          'Please refresh your cart and try again.'
-        ],
-        address,
-        phone,
-        payment_reference: paymentReference
-      });
-    }
-
-    console.error('Error creating order:', error);
-
-    return renderCheckout(res, {
-      errors: ['Unable to place the order. Please try again later.'],
+  } catch (err) {
+    console.error('Error creating order:', err);
+    res.render('checkout', {
+      errors: ['Failed to place order due to a server issue. Please try again.'],
+      success: null,
       address,
       phone,
       payment_reference: paymentReference
@@ -906,1393 +585,801 @@ app.post(['/checkout.php', '/checkout'], async (req, res) => {
   }
 });
 
-// ----------------------------------------------------
-// User orders
-// ----------------------------------------------------
-
+// 6. User Orders
 app.get(['/orders.php', '/orders'], async (req, res) => {
-  if (!isAuthenticated(req)) {
+  if (!req.session || !req.session.user_id) {
     return res.redirect('/login.php?return=/orders.php');
   }
 
   try {
     const orders = await db.getOrdersByUser(req.session.user_id);
-    return res.render('orders', { orders });
-  } catch (error) {
-    console.error('Error loading orders:', error);
-    return res.status(500).send('Internal Server Error');
+    res.render('orders', { orders });
+  } catch (err) {
+    console.error('Error loading orders:', err);
+    res.status(500).send('Internal Server Error');
   }
 });
 
-// ----------------------------------------------------
-// Product upload
-// ----------------------------------------------------
-
+// 7. Sell / Upload Product
 app.get(['/upload.php', '/upload'], async (req, res) => {
-  try {
-    const categories = await db.getCategories();
+  const categories = await db.getCategories();
+  res.render('upload', {
+    categories,
+    errors: [],
+    success: null,
+    formData: null
+  });
+});
+
+app.post(['/upload.php', '/upload'], upload.fields([
+  { name: 'front_image', maxCount: 1 },
+  { name: 'back_image', maxCount: 1 },
+  { name: 'left_image', maxCount: 1 },
+  { name: 'right_image', maxCount: 1 },
+  { name: 'top_image', maxCount: 1 },
+  { name: 'photos', maxCount: 10 },
+  { name: 'images', maxCount: 10 }
+]), async (req, res) => {
+  const categories = await db.getCategories();
+  const errors = [];
+
+  const title = (req.body.title || '').trim();
+  const description = (req.body.description || '').trim();
+  const price = parseFloat(req.body.price) || 0;
+  const quantity = isNaN(parseInt(req.body.quantity, 10)) ? 1 : Math.max(1, parseInt(req.body.quantity, 10));
+  const categoryId = parseInt(req.body.category, 10) || 0;
+  const phone = (req.body.phone || '').trim();
+  const whatsappNumber = (req.body.whatsapp_number || req.body.phone || '').trim();
+  const location = (req.body.location || '').trim();
+  const payment = (req.body.payment || '').trim();
+
+  if (!title) errors.push('Title is required.');
+  if (!description) errors.push('Description is required.');
+  if (price <= 0) errors.push('Price must be greater than zero.');
+  if (quantity < 0) errors.push('Quantity must be 0 or more.');
+  if (categoryId <= 0) errors.push('Please select a product category.');
+  if (!phone) errors.push('Seller contact phone number is required.');
+  if (!location) errors.push('Seller location in Uganda is required.');
+
+  const files = req.files || {};
+  const uploadedFiles = [];
+
+  // Front/Main image is the primary view
+  if (files['front_image'] && files['front_image'].length > 0) {
+    uploadedFiles.push(files['front_image'][0].filename);
+  }
+
+  // Any individual perspective angle views
+  ['back_image', 'left_image', 'right_image', 'top_image'].forEach(view => {
+    if (files[view] && files[view].length > 0) {
+      const fn = files[view][0].filename;
+      if (!uploadedFiles.includes(fn)) {
+        uploadedFiles.push(fn);
+      }
+    }
+  });
+
+  // Any batch multiple photo selections
+  ['photos', 'images'].forEach(field => {
+    if (files[field] && files[field].length > 0) {
+      files[field].forEach(f => {
+        if (!uploadedFiles.includes(f.filename)) {
+          uploadedFiles.push(f.filename);
+        }
+      });
+    }
+  });
+
+  // Fallback if no front_image specifically tagged
+  if (uploadedFiles.length === 0) {
+    for (const key of Object.keys(files)) {
+      if (Array.isArray(files[key])) {
+        files[key].forEach(f => {
+          if (!uploadedFiles.includes(f.filename)) {
+            uploadedFiles.push(f.filename);
+          }
+        });
+      }
+    }
+  }
+
+  if (uploadedFiles.length === 0) {
+    errors.push('Please upload at least one clear product image.');
+  }
+
+  if (errors.length > 0) {
+    uploadedFiles.forEach(f => {
+      try { fs.unlinkSync(path.join(uploadsDir, f)); } catch {}
+    });
 
     return res.render('upload', {
       categories,
-      errors: [],
+      errors,
       success: null,
+      formData: req.body
+    });
+  }
+
+  try {
+    const uploadedImages = [];
+    for (const fn of uploadedFiles) {
+      const filePath = path.join(uploadsDir, fn);
+      let dataUrl = '';
+      try {
+        if (fs.existsSync(filePath)) {
+          const buf = fs.readFileSync(filePath);
+          const ext = path.extname(fn).toLowerCase().replace('.', '') || 'jpeg';
+          const mimeType = ext === 'png' ? 'image/png' : (ext === 'webp' ? 'image/webp' : (ext === 'svg' ? 'image/svg+xml' : 'image/jpeg'));
+          dataUrl = `data:${mimeType};base64,${buf.toString('base64')}`;
+        }
+      } catch (e) {
+        console.warn('Could not read image file for base64 storage:', e.message);
+      }
+      uploadedImages.push({
+        filename: fn,
+        dataUrl: dataUrl || `/uploads/${fn}`
+      });
+    }
+
+    const newProdId = await db.createProduct({
+      title,
+      description,
+      price,
+      category_id: categoryId,
+      phone,
+      whatsapp_number: whatsappNumber,
+      location,
+      payment_code: payment,
+      quantity,
+      images: uploadedImages,
+      seller_id: (req.session && req.session.user_id) ? req.session.user_id : null
+    });
+
+    res.render('upload', {
+      categories,
+      errors: [],
+      success: `Product "${title}" uploaded successfully with ${uploadedFiles.length} photo(s)! (Listing ID: #${newProdId})`,
       formData: null
     });
-  } catch (error) {
-    console.error('Error loading upload page:', error);
-    return res.status(500).send('Internal Server Error');
+  } catch (err) {
+    console.error('Error uploading product:', err);
+    res.render('upload', {
+      categories,
+      errors: ['An unexpected error occurred while saving your product to the database: ' + (err.message || 'Server error')],
+      success: null,
+      formData: req.body
+    });
   }
 });
 
-function collectUploadedFiles(files) {
-  const result = [];
-  const preferredFields = [
-    'front_image',
-    'back_image',
-    'left_image',
-    'right_image',
-    'top_image',
-    'photos',
-    'images'
-  ];
-
-  for (const field of preferredFields) {
-    for (const file of files?.[field] || []) {
-      if (file?.filename && !result.includes(file.filename)) {
-        result.push(file.filename);
-      }
-    }
-  }
-
-  if (result.length === 0) {
-    for (const fileList of Object.values(files || {})) {
-      for (const file of fileList || []) {
-        if (file?.filename && !result.includes(file.filename)) {
-          result.push(file.filename);
-        }
-      }
-    }
-  }
-
-  return result;
-}
-
-function removeUploadedFiles(filenames) {
-  for (const filename of filenames) {
-    const safeFilename = path.basename(String(filename));
-    const filePath = path.join(uploadsDir, safeFilename);
-
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    } catch (error) {
-      console.warn(
-        'Could not remove uploaded file:',
-        error.message
-      );
-    }
-  }
-}
-
-app.post(
-  ['/upload.php', '/upload'],
-  upload.fields([
-    { name: 'front_image', maxCount: 1 },
-    { name: 'back_image', maxCount: 1 },
-    { name: 'left_image', maxCount: 1 },
-    { name: 'right_image', maxCount: 1 },
-    { name: 'top_image', maxCount: 1 },
-    { name: 'photos', maxCount: 10 },
-    { name: 'images', maxCount: 10 }
-  ]),
-  async (req, res) => {
-    const categories = await db.getCategories();
-    const uploadedFiles = collectUploadedFiles(req.files);
-    const errors = [];
-
-    const title = String(req.body.title || '').trim();
-    const description = String(req.body.description || '').trim();
-    const phone = String(req.body.phone || '').trim();
-    const whatsappNumber = String(
-      req.body.whatsapp_number || req.body.phone || ''
-    ).trim();
-    const location = String(req.body.location || '').trim();
-    const paymentCode = String(req.body.payment || '').trim();
-
-    const price = Number.parseFloat(req.body.price);
-    const quantity = parsePositiveInteger(req.body.quantity) || 1;
-    const categoryId = parsePositiveInteger(req.body.category);
-
-    if (!title || title.length > 255) {
-      errors.push('Title is required and must be no longer than 255 characters.');
-    }
-
-    if (!description) {
-      errors.push('Description is required.');
-    }
-
-    if (!Number.isFinite(price) || price <= 0) {
-      errors.push('Price must be greater than zero.');
-    }
-
-    if (!categoryId) {
-      errors.push('Please select a product category.');
-    }
-
-    if (!phone) {
-      errors.push('Seller contact phone number is required.');
-    }
-
-    if (!location) {
-      errors.push('Seller location is required.');
-    }
-
-    if (uploadedFiles.length === 0) {
-      errors.push('Please upload at least one product image.');
-    }
-
-    if (errors.length > 0) {
-      removeUploadedFiles(uploadedFiles);
-
-      return res.render('upload', {
-        categories,
-        errors,
-        success: null,
-        formData: req.body
-      });
-    }
-
-    try {
-      const images = uploadedFiles.map(filename => {
-        const filePath = path.join(uploadsDir, filename);
-        let dataUrl = `/uploads/${filename}`;
-
-        try {
-          const fileBuffer = fs.readFileSync(filePath);
-          const extension = path.extname(filename).toLowerCase();
-
-          const mimeType =
-            extension === '.png'
-              ? 'image/png'
-              : extension === '.webp'
-                ? 'image/webp'
-                : extension === '.svg'
-                  ? 'image/svg+xml'
-                  : 'image/jpeg';
-
-          dataUrl =
-            `data:${mimeType};base64,` +
-            fileBuffer.toString('base64');
-        } catch (error) {
-          console.warn(
-            'Could not encode uploaded image:',
-            error.message
-          );
-        }
-
-        return {
-          filename,
-          dataUrl
-        };
-      });
-
-      const productId = await db.createProduct({
-        title,
-        description,
-        price,
-        category_id: categoryId,
-        phone,
-        whatsapp_number: whatsappNumber,
-        location,
-        payment_code: paymentCode,
-        quantity,
-        images,
-        seller_id: req.session?.user_id || null
-      });
-
-      return res.render('upload', {
-        categories,
-        errors: [],
-        success:
-          `Product "${title}" uploaded successfully ` +
-          `with ${uploadedFiles.length} photo(s)! ` +
-          `(Listing ID: #${productId})`,
-        formData: null
-      });
-    } catch (error) {
-      console.error('Error uploading product:', error);
-      removeUploadedFiles(uploadedFiles);
-
-      return res.render('upload', {
-        categories,
-        errors: ['Unable to save the product. Please try again.'],
-        success: null,
-        formData: req.body
-      });
-    }
-  }
-);
-
-// ----------------------------------------------------
-// Messaging
-// ----------------------------------------------------
-
+// 8. Direct In-App Messaging System
 app.get(['/messages.php', '/messages'], async (req, res) => {
-  if (!isAuthenticated(req)) {
+  if (!req.session || !req.session.user_id) {
     return res.redirect('/login.php?return=/messages.php');
   }
 
-  try {
-    const userId = req.session.user_id;
-    const targetUserId =
-      parsePositiveInteger(req.query.to) || 0;
-    const productId =
-      parsePositiveInteger(req.query.product_id) || 0;
+  const userId = req.session.user_id;
+  const toUserId = parseInt(req.query.to, 10) || 0;
+  const productId = parseInt(req.query.product_id, 10) || 0;
 
-    const conversations =
-      await db.getConversationsForUser(userId);
+  const conversations = await db.getConversationsForUser(userId);
+  let activeMessages = [];
+  let counterparty = null;
+  let activeProduct = null;
 
-    let activeMessages = [];
-    let counterparty = null;
-    let activeProduct = null;
-
-    if (targetUserId > 0 && targetUserId !== userId) {
-      counterparty = await db.findUserById(targetUserId);
-
-      if (counterparty) {
-        activeMessages = await db.getMessagesBetweenUsers(
-          userId,
-          targetUserId
-        );
-      }
-
-      if (productId > 0) {
-        activeProduct = await db.getProductById(productId);
-      }
-    } else if (conversations.length > 0) {
-      const firstConversation = conversations[0];
-      const firstCounterpartyId =
-        parsePositiveInteger(firstConversation.counterpartyId);
-
-      if (firstCounterpartyId) {
-        counterparty =
-          await db.findUserById(firstCounterpartyId);
-
-        activeMessages =
-          await db.getMessagesBetweenUsers(
-            userId,
-            firstCounterpartyId
-          );
-      }
+  if (toUserId > 0 && toUserId !== userId) {
+    counterparty = await db.findUserById(toUserId);
+    if (!counterparty) {
+      // default to admin
+      counterparty = { id: 2, name: 'EasyMarket Support & Admin', whatsapp_number: '256763480495' };
     }
-
-    return res.render('messages', {
-      conversations,
-      activeMessages,
-      counterparty,
-      activeProduct,
-      userId
-    });
-  } catch (error) {
-    console.error('Error loading messages:', error);
-    return res.status(500).send('Internal Server Error');
+    activeMessages = await db.getMessagesBetweenUsers(userId, toUserId);
+    if (productId > 0) {
+      activeProduct = await db.getProductById(productId);
+    }
+  } else if (conversations.length > 0) {
+    const firstConv = conversations[0];
+    counterparty = await db.findUserById(firstConv.counterpartyId);
+    activeMessages = await db.getMessagesBetweenUsers(userId, firstConv.counterpartyId);
   }
+
+  res.render('messages', {
+    conversations,
+    activeMessages,
+    counterparty,
+    activeProduct,
+    userId
+  });
 });
 
 app.post(['/messages.php', '/messages'], async (req, res) => {
-  if (!isAuthenticated(req)) {
+  if (!req.session || !req.session.user_id) {
     return res.redirect('/login.php?return=/messages.php');
   }
 
-  const receiverId = parsePositiveInteger(req.body.receiver_id);
-  const productId =
-    parsePositiveInteger(req.body.product_id) || null;
-  const message = String(req.body.message || '').trim();
+  const senderId = req.session.user_id;
+  const receiverId = parseInt(req.body.receiver_id, 10) || 2;
+  const productId = parseInt(req.body.product_id, 10) || null;
+  const message = (req.body.message || '').trim();
 
-  if (
-    receiverId &&
-    receiverId !== Number(req.session.user_id) &&
-    message &&
-    message.length <= 5000
-  ) {
-    try {
-      await db.sendMessage({
-        senderId: req.session.user_id,
-        receiverId,
-        productId,
-        message
-      });
-    } catch (error) {
-      console.error('Error sending message:', error);
-    }
+  if (message && receiverId !== senderId) {
+    await db.sendMessage({
+      senderId,
+      receiverId,
+      productId,
+      message
+    });
   }
 
-  const query = new URLSearchParams({
-    to: String(receiverId || '')
-  });
-
-  if (productId) {
-    query.set('product_id', String(productId));
-  }
-
-  return res.redirect(`/messages.php?${query.toString()}`);
+  res.redirect(`/messages.php?to=${receiverId}${productId ? `&product_id=${productId}` : ''}`);
 });
 
-// ----------------------------------------------------
-// Notifications
-// ----------------------------------------------------
-
+// 9. Notifications Center
 app.get(['/notifications.php', '/notifications'], async (req, res) => {
-  if (!isAuthenticated(req)) {
+  if (!req.session || !req.session.user_id) {
     return res.redirect('/login.php?return=/notifications.php');
   }
 
-  try {
-    const notifications =
-      await db.getNotificationsByUser(req.session.user_id);
-
-    return res.render('notifications', { notifications });
-  } catch (error) {
-    console.error('Error loading notifications:', error);
-    return res.status(500).send('Internal Server Error');
-  }
+  const notifications = await db.getNotificationsByUser(req.session.user_id);
+  res.render('notifications', { notifications });
 });
 
-app.post(
-  ['/notifications.php/read', '/notifications/read'],
-  async (req, res) => {
-    if (!isAuthenticated(req)) {
-      return res.json({ success: false });
-    }
-
-    const notificationId =
-      parsePositiveInteger(req.body.id);
-
-    if (notificationId) {
-      await db.markNotificationAsRead(
-        notificationId,
-        req.session.user_id
-      );
-    }
-
-    const notifications =
-      await db.getNotificationsByUser(req.session.user_id);
-
-    return res.json({
-      success: true,
-      unreadCount: notifications.filter(
-        notification => !notification.is_read
-      ).length
-    });
+app.post(['/notifications.php/read', '/notifications/read'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.json({ success: false });
   }
-);
 
-app.post(
-  ['/notifications.php/read-all', '/notifications/read-all'],
-  async (req, res) => {
-    if (!isAuthenticated(req)) {
-      return res.json({ success: false });
-    }
-
-    await db.markAllNotificationsAsRead(req.session.user_id);
-
-    return res.json({
-      success: true,
-      unreadCount: 0
-    });
+  const notifId = parseInt(req.body.id, 10);
+  if (notifId) {
+    await db.markNotificationAsRead(notifId, req.session.user_id);
   }
-);
+  const notifs = await db.getNotificationsByUser(req.session.user_id);
+  const unreadCount = notifs.filter(n => !n.is_read).length;
+  res.json({ success: true, unreadCount });
+});
 
-app.post(
-  ['/notifications.php/delete', '/notifications/delete'],
-  async (req, res) => {
-    if (!isAuthenticated(req)) {
-      return res.json({ success: false });
-    }
-
-    const notificationId =
-      parsePositiveInteger(req.body.id);
-
-    if (notificationId) {
-      await db.deleteNotification(
-        notificationId,
-        req.session.user_id
-      );
-    }
-
-    const notifications =
-      await db.getNotificationsByUser(req.session.user_id);
-
-    return res.json({
-      success: true,
-      unreadCount: notifications.filter(
-        notification => !notification.is_read
-      ).length,
-      remainingCount: notifications.length
-    });
+app.post(['/notifications.php/read-all', '/notifications/read-all'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.json({ success: false });
   }
-);
 
-app.post(
-  ['/notifications.php/delete-all', '/notifications/delete-all'],
-  async (req, res) => {
-    if (!isAuthenticated(req)) {
-      return res.json({ success: false });
-    }
+  await db.markAllNotificationsAsRead(req.session.user_id);
+  res.json({ success: true, unreadCount: 0 });
+});
 
-    await db.deleteAllNotifications(req.session.user_id);
-
-    return res.json({
-      success: true,
-      unreadCount: 0,
-      remainingCount: 0
-    });
+app.post(['/notifications.php/delete', '/notifications/delete'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.json({ success: false });
   }
-);
 
-// ----------------------------------------------------
-// Support
-// ----------------------------------------------------
+  const notifId = parseInt(req.body.id, 10);
+  if (notifId) {
+    await db.deleteNotification(notifId, req.session.user_id);
+  }
+  const notifs = await db.getNotificationsByUser(req.session.user_id);
+  const unreadCount = notifs.filter(n => !n.is_read).length;
+  res.json({ success: true, unreadCount, remainingCount: notifs.length });
+});
+
+app.post(['/notifications.php/delete-all', '/notifications/delete-all'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.json({ success: false });
+  }
+
+  await db.deleteAllNotifications(req.session.user_id);
+  res.json({ success: true, unreadCount: 0, remainingCount: 0 });
+});
+
+// 10. Customer Support Help Center
 app.get(['/support.php', '/support'], async (req, res) => {
-  try {
-    const allTickets = await db.getAllSupportTickets();
-    const tickets = isAuthenticated(req)
-      ? allTickets.filter(
-          ticket =>
-            Number(ticket.user_id) ===
-            Number(req.session.user_id)
-        )
-      : [];
+  const tickets = (req.session && req.session.user_id) 
+    ? (await db.getAllSupportTickets()).filter(t => t.user_id === req.session.user_id)
+    : [];
 
-    return res.render('support', {
-      tickets,
-      success: req.query.sent
-        ? 'Your support ticket has been submitted.'
-        : null,
-      errors: []
-    });
-  } catch (error) {
-    console.error('Error loading support:', error);
-    return res.status(500).send('Internal Server Error');
-  }
-});
-// ----------------------------------------------------
-// Messaging
-// ----------------------------------------------------
-
-app.get(['/messages.php', '/messages'], async (req, res) => {
-  if (!isAuthenticated(req)) {
-    return res.redirect('/login.php?return=/messages.php');
-  }
-
-  try {
-    const userId = req.session.user_id;
-    const targetUserId =
-      parsePositiveInteger(req.query.to) || 0;
-    const productId =
-      parsePositiveInteger(req.query.product_id) || 0;
-
-    const conversations =
-      await db.getConversationsForUser(userId);
-
-    let activeMessages = [];
-    let counterparty = null;
-    let activeProduct = null;
-
-    if (targetUserId > 0 && targetUserId !== userId) {
-      counterparty = await db.findUserById(targetUserId);
-
-      if (counterparty) {
-        activeMessages = await db.getMessagesBetweenUsers(
-          userId,
-          targetUserId
-        );
-      }
-
-      if (productId > 0) {
-        activeProduct = await db.getProductById(productId);
-      }
-    } else if (conversations.length > 0) {
-      const firstConversation = conversations[0];
-      const firstCounterpartyId =
-        parsePositiveInteger(firstConversation.counterpartyId);
-
-      if (firstCounterpartyId) {
-        counterparty =
-          await db.findUserById(firstCounterpartyId);
-
-        activeMessages =
-          await db.getMessagesBetweenUsers(
-            userId,
-            firstCounterpartyId
-          );
-      }
-    }
-
-    return res.render('messages', {
-      conversations,
-      activeMessages,
-      counterparty,
-      activeProduct,
-      userId
-    });
-  } catch (error) {
-    console.error('Error loading messages:', error);
-    return res.status(500).send('Internal Server Error');
-  }
-});
-
-app.post(['/messages.php', '/messages'], async (req, res) => {
-  if (!isAuthenticated(req)) {
-    return res.redirect('/login.php?return=/messages.php');
-  }
-
-  const receiverId = parsePositiveInteger(req.body.receiver_id);
-  const productId =
-    parsePositiveInteger(req.body.product_id) || null;
-  const message = String(req.body.message || '').trim();
-
-  if (
-    receiverId &&
-    receiverId !== Number(req.session.user_id) &&
-    message &&
-    message.length <= 5000
-  ) {
-    try {
-      await db.sendMessage({
-        senderId: req.session.user_id,
-        receiverId,
-        productId,
-        message
-      });
-    } catch (error) {
-      console.error('Error sending message:', error);
-    }
-  }
-
-  const query = new URLSearchParams({
-    to: String(receiverId || '')
+  res.render('support', {
+    tickets,
+    success: req.query.sent ? 'Your support ticket has been submitted. Our team will review and reply promptly.' : null,
+    errors: []
   });
-
-  if (productId) {
-    query.set('product_id', String(productId));
-  }
-
-  return res.redirect(`/messages.php?${query.toString()}`);
 });
 
-// ----------------------------------------------------
-// Notifications
-// ----------------------------------------------------
-
-app.get(['/notifications.php', '/notifications'], async (req, res) => {
-  if (!isAuthenticated(req)) {
-    return res.redirect('/login.php?return=/notifications.php');
-  }
-
-  try {
-    const notifications =
-      await db.getNotificationsByUser(req.session.user_id);
-
-    return res.render('notifications', { notifications });
-  } catch (error) {
-    console.error('Error loading notifications:', error);
-    return res.status(500).send('Internal Server Error');
-  }
-});
-
-app.post(
-  ['/notifications.php/read', '/notifications/read'],
-  async (req, res) => {
-    if (!isAuthenticated(req)) {
-      return res.json({ success: false });
-    }
-
-    const notificationId =
-      parsePositiveInteger(req.body.id);
-
-    if (notificationId) {
-      await db.markNotificationAsRead(
-        notificationId,
-        req.session.user_id
-      );
-    }
-
-    const notifications =
-      await db.getNotificationsByUser(req.session.user_id);
-
-    return res.json({
-      success: true,
-      unreadCount: notifications.filter(
-        notification => !notification.is_read
-      ).length
-    });
-  }
-);
-
-app.post(
-  ['/notifications.php/read-all', '/notifications/read-all'],
-  async (req, res) => {
-    if (!isAuthenticated(req)) {
-      return res.json({ success: false });
-    }
-
-    await db.markAllNotificationsAsRead(req.session.user_id);
-
-    return res.json({
-      success: true,
-      unreadCount: 0
-    });
-  }
-);
-
-app.post(
-  ['/notifications.php/delete', '/notifications/delete'],
-  async (req, res) => {
-    if (!isAuthenticated(req)) {
-      return res.json({ success: false });
-    }
-
-    const notificationId =
-      parsePositiveInteger(req.body.id);
-
-    if (notificationId) {
-      await db.deleteNotification(
-        notificationId,
-        req.session.user_id
-      );
-    }
-
-    const notifications =
-      await db.getNotificationsByUser(req.session.user_id);
-
-    return res.json({
-      success: true,
-      unreadCount: notifications.filter(
-        notification => !notification.is_read
-      ).length,
-      remainingCount: notifications.length
-    });
-  }
-);
-
-app.post(
-  ['/notifications.php/delete-all', '/notifications/delete-all'],
-  async (req, res) => {
-    if (!isAuthenticated(req)) {
-      return res.json({ success: false });
-    }
-
-    await db.deleteAllNotifications(req.session.user_id);
-
-    return res.json({
-      success: true,
-      unreadCount: 0,
-      remainingCount: 0
-    });
-  }
-);
-
-// ----------------------------------------------------
-// Support
-// ----------------------------------------------------
-
-app.get(['/support.php', '/support'], async (req, res) => {
-  try {
-    const allTickets = await db.getAllSupportTickets();
-    const tickets = isAuthenticated(req)
-      ? allTickets.filter(
-          ticket =>
-            Number(ticket.user_id) ===
-            Number(req.session.user_id)
-        )
-      : [];
-
-    return res.render('support', {
-      tickets,
-      success: req.query.sent
-        ? 'Your support ticket has been submitted.'
-        : null,
-      errors: []
-    });
-  } catch (error) {
-    console.error('Error loading support:', error);
-    return res.status(500).send('Internal Server Error');
-  }
-});
 app.post(['/support.php', '/support'], async (req, res) => {
-  const subject = String(req.body.subject || '').trim();
-  const message = String(req.body.message || '').trim();
+  const subject = (req.body.subject || '').trim();
+  const message = (req.body.message || '').trim();
+  const name = (req.body.name || (req.session ? req.session.user_name : '') || '').trim();
+  const email = (req.body.email || (req.session ? req.session.user_email : '') || '').trim();
 
-  if (
-    !subject ||
-    !message ||
-    subject.length > 255 ||
-    message.length > 10000
-  ) {
-    const tickets = isAuthenticated(req)
-      ? (await db.getAllSupportTickets()).filter(
-          ticket =>
-            Number(ticket.user_id) ===
-            Number(req.session.user_id)
-        )
+  if (!subject || !message) {
+    const tickets = (req.session && req.session.user_id) 
+      ? (await db.getAllSupportTickets()).filter(t => t.user_id === req.session.user_id)
       : [];
-
     return res.render('support', {
       tickets,
-      errors: [
-        'A valid subject and message are required.'
-      ],
+      errors: ['Subject and Message are required.'],
       success: null
     });
   }
 
-  const userId = req.session?.user_id || null;
-  const user = userId
-    ? await db.findUserById(userId)
-    : null;
+  await db.createSupportTicket({
+    userId: req.session ? req.session.user_id : null,
+    userName: name || 'Customer',
+    userEmail: email || 'customer@easymarket.ug',
+    subject,
+    message
+  });
 
-  try {
-    await db.createSupportTicket({
-      userId,
-      userName: user?.name || 'Customer',
-      userEmail: user?.email || '',
-      subject,
-      message
-    });
-
-    return res.redirect('/support.php?sent=1');
-  } catch (error) {
-    console.error('Error creating support ticket:', error);
-    return res.status(500).send('Unable to create support ticket.');
-  }
+  res.redirect('/support.php?sent=1');
 });
 
-// ----------------------------------------------------
-// Returns and refunds
-// ----------------------------------------------------
-
+// 11. Customer Returns & Refunds
 app.post(['/returns.php', '/returns'], async (req, res) => {
-  if (!isAuthenticated(req)) {
+  if (!req.session || !req.session.user_id) {
     return res.redirect('/login.php');
   }
 
-  const orderId = parsePositiveInteger(req.body.order_id);
-  const reason = String(req.body.reason || '').trim();
-  const amount = Number.parseFloat(req.body.amount) || 0;
+  const orderId = parseInt(req.body.order_id, 10);
+  const reason = (req.body.reason || '').trim();
+  const amount = parseFloat(req.body.amount) || 0;
 
-  if (!orderId || !reason || reason.length > 5000) {
-    return res.redirect('/orders.php');
-  }
-
-  try {
-    const orders = await db.getOrdersByUser(req.session.user_id);
-    const order = orders.find(
-      item => Number(item.id) === Number(orderId)
-    );
-
-    if (!order) {
-      return res.redirect('/orders.php');
-    }
-
+  if (orderId && reason) {
     await db.createReturnRefund({
       orderId,
       userId: req.session.user_id,
       reason,
-      amount: Math.max(0, amount)
+      amount
     });
-  } catch (error) {
-    console.error('Error creating return request:', error);
   }
 
-  return res.redirect('/orders.php');
+  res.redirect('/orders.php');
 });
 
 // ----------------------------------------------------
-// Authentication: login
+// AUTHENTICATION ROUTES
 // ----------------------------------------------------
 
+// Login
 app.get(['/login.php', '/login'], (req, res) => {
-  if (isAuthenticated(req)) {
+  if (req.session && req.session.user_id) {
     return res.redirect('/index.php');
   }
-
-  return renderLogin(res, {
-    returnTo: safeReturnPath(req.query.return)
+  res.render('login', {
+    errors: [],
+    email: '',
+    returnTo: req.query.return || ''
   });
 });
-
-async function authenticateUser(email, password) {
-  if (!email || !password) {
-    return null;
-  }
-
-  const user = await db.findUserByEmailOrUsername(email);
-
-  if (!user || !user.password_hash) {
-    return null;
-  }
-
-  const matches = await bcrypt.compare(
-    password,
-    user.password_hash
-  );
-
-  return matches ? user : null;
-}
 
 app.post(['/login.php', '/login'], async (req, res) => {
-  const clientIp = getClientIp(req);
-  const email = String(req.body.email || '')
-    .trim()
-    .toLowerCase();
-  const password = String(req.body.password || '');
-  const returnTo = safeReturnPath(req.body.return);
-
+  const clientIp = req.ip || req.connection.remoteAddress;
   if (!checkRateLimit(clientIp)) {
-    return renderLogin(res, {
-      errors: [
-        'Too many failed attempts. Please wait five minutes.'
-      ],
-      returnTo
+    return res.render('login', {
+      errors: ['Too many failed attempts. Please wait 5 minutes before trying again.'],
+      email: '',
+      returnTo: req.body.return || ''
     });
   }
 
-  if (!email || !password) {
-    recordFailedLogin(clientIp);
-
-    return renderLogin(res, {
-      errors: ['Please enter your email and password.'],
-      email,
-      returnTo
-    });
-  }
-
-  try {
-    const user = await authenticateUser(email, password);
-
-    if (!user) {
-      recordFailedLogin(clientIp);
-
-      return renderLogin(res, {
-        errors: ['Invalid email address or password.'],
-        email,
-        returnTo
-      });
-    }
-
-    resetRateLimit(clientIp);
-
-    setAuthSession(req, res, {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone || '',
-      whatsapp_number:
-        user.whatsapp_number || user.phone || '',
-      is_admin: user.is_admin ? 1 : 0
-    });
-
-    return req.session.save(error => {
-      if (error) {
-        console.error('Session save error:', error);
-        return res.status(500).send('Unable to create session.');
-      }
-
-      if (Number(user.is_admin) === 1) {
-        return res.redirect('/admin_dashboard.php');
-      }
-
-      return res.redirect(returnTo);
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-    return renderLogin(res, {
-      errors: ['Unable to sign in at this time.'],
-      email,
-      returnTo
-    });
-  }
-});
-
-// ----------------------------------------------------
-// Authentication: registration
-// ----------------------------------------------------
-
-app.get(['/register.php', '/register'], (req, res) => {
-  if (isAuthenticated(req)) {
-    return res.redirect('/index.php');
-  }
-
-  return res.render('register', {
-    errors: [],
-    name: '',
-    email: '',
-    phone: '',
-    whatsapp_number: ''
-  });
-});
-app.post(['/register.php', '/register'], async (req, res) => {
-  const name = String(req.body.name || '').trim();
-  const email = String(req.body.email || '')
-    .trim()
-    .toLowerCase();
-  const phone = String(req.body.phone || '').trim();
-  const whatsappNumber = String(
-    req.body.whatsapp_number || ''
-  ).trim();
-  const password = String(req.body.password || '');
-  const confirmation = String(req.body.confirm || '');
-
-  const formData = {
-    name,
-    email,
-    phone,
-    whatsapp_number: whatsappNumber
-  };
+  const emailInput = (req.body.email || '').trim().toLowerCase();
+  const password = req.body.password || '';
+  const returnTo = req.body.return || '';
 
   const errors = [];
-
-  if (!name || name.length > 255) {
-    errors.push('Name is required and must be valid.');
+  if (!emailInput || !password) {
+    errors.push('Please enter your email and password.');
   }
 
-  if (!email) {
-    errors.push('Email is required.');
+  let user = null;
+  if (errors.length === 0) {
+    user = await db.findUserByEmailOrUsername(emailInput);
+    if (!user) {
+      recordFailedLogin(clientIp);
+      errors.push('Invalid email address or password.');
+    } else {
+      const match = bcrypt.compareSync(password, user.password_hash);
+      if (!match) {
+        recordFailedLogin(clientIp);
+        errors.push('Invalid email address or password.');
+      }
+    }
   }
 
-  if (!password || !confirmation) {
-    errors.push('Password and confirmation are required.');
+  if (errors.length > 0) {
+    return res.render('login', {
+      errors,
+      email: emailInput,
+      returnTo
+    });
   }
 
-  if (password !== confirmation) {
+  resetRateLimit(clientIp);
+
+  setAuthSession(req, res, {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone || '',
+    whatsapp_number: user.whatsapp_number || user.phone || '',
+    is_admin: user.is_admin ? 1 : 0
+  });
+
+  req.session.save(() => {
+    if (user.is_admin === 1) {
+      return res.redirect('/admin_dashboard.php');
+    }
+    if (returnTo && !returnTo.startsWith('http') && !returnTo.startsWith('//')) {
+      const safeReturn = returnTo.startsWith('/') ? returnTo : '/' + returnTo;
+      return res.redirect(safeReturn);
+    }
+    res.redirect('/index.php');
+  });
+});
+
+// Register (with WhatsApp prompt & Fallback)
+app.get(['/register.php', '/register'], (req, res) => {
+  try {
+    if (req.session && req.session.user_id) {
+      return res.redirect('/index.php');
+    }
+    res.render('register', {
+      errors: [],
+      name: '',
+      email: '',
+      phone: '',
+      whatsapp_number: ''
+    });
+  } catch (err) {
+    console.error('Error loading register view:', err);
+    res.status(500).send('Unable to load registration page.');
+  }
+});
+
+app.post(['/register.php', '/register'], async (req, res) => {
+  const name = (req.body.name || '').trim();
+  const email = (req.body.email || '').trim().toLowerCase();
+  const phone = (req.body.phone || '').trim();
+  const whatsappNumber = (req.body.whatsapp_number || '').trim();
+  const password = req.body.password || '';
+  const confirm = req.body.confirm || '';
+
+  const errors = [];
+  if (!name || !email || !password || !confirm) {
+    errors.push('Name, email, and password fields are required.');
+  }
+  if (!email.includes('@')) {
+    errors.push('Enter a valid email address.');
+  }
+  if (password !== confirm) {
     errors.push('Passwords do not match.');
   }
-
-  if (password.length < 8) {
-    errors.push('Password must be at least 8 characters.');
+  if (password.length < 6) {
+    errors.push('Password should be at least 6 characters.');
   }
 
   try {
     if (errors.length === 0) {
-      const emailResult =
-        await validateEmailAuthenticity(email);
-
-      if (!emailResult.isValid) {
-        errors.push(
-          emailResult.error || 'Email address is invalid.'
-        );
+      // Check email authenticity and Google/mailserver validity
+      const emailCheck = await validateEmailAuthenticity(email);
+      if (!emailCheck.isValid) {
+        errors.push(emailCheck.error || 'The email address could not be verified as authentic.');
       }
     }
 
     if (errors.length === 0) {
-      const existing =
-        await db.findUserByEmailOrUsername(email);
-
+      const existing = await db.findUserByEmailOrUsername(email);
       if (existing) {
-        errors.push(
-          'This email address is already registered.'
-        );
+        errors.push('This email address is already registered. Please sign in instead.');
       }
     }
 
     if (errors.length > 0) {
       return res.render('register', {
         errors,
-        ...formData
+        name,
+        email,
+        phone,
+        whatsapp_number: whatsappNumber
       });
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
+    const hash = bcrypt.hashSync(password, 10);
+    const newUser = await db.createUser(name, email, hash, 0, phone, whatsappNumber);
 
-    const user = await db.createUser(
-      name,
-      email,
-      passwordHash,
-      0,
-      phone,
-      whatsappNumber
-    );
-
-    if (!user?.id) {
-      throw new Error('User record was not created.');
+    if (!newUser || !newUser.id) {
+      throw new Error('User record could not be initialized.');
     }
 
     setAuthSession(req, res, {
-      id: user.id,
-      name: user.name || name,
-      email: user.email || email,
-      phone: user.phone || phone,
-      whatsapp_number:
-        user.whatsapp_number ||
-        whatsappNumber ||
-        phone,
+      id: newUser.id,
+      name: name,
+      email: email,
+      phone: phone,
+      whatsapp_number: whatsappNumber || phone,
       is_admin: 0
     });
 
     req.session.justRegistered = true;
 
-    return req.session.save(error => {
-      if (error) {
-        console.error('Registration session error:', error);
-        return res.status(500).send('Unable to create session.');
-      }
-
-      return res.redirect('/index.php');
+    req.session.save((saveErr) => {
+      if (saveErr) console.error('Session save warning:', saveErr);
+      res.redirect('/index.php');
     });
-  } catch (error) {
-    console.error('Registration error:', error);
-
-    return res.render('register', {
-      errors: ['Registration could not be completed.'],
-      ...formData
+  } catch (err) {
+    console.error('Error during user registration:', err);
+    res.render('register', {
+      errors: ['Registration could not be completed: ' + (err.message || 'Please try again with valid details.')],
+      name,
+      email,
+      phone,
+      whatsapp_number: whatsappNumber
     });
   }
 });
 
-// ----------------------------------------------------
-// Admin login
-// ----------------------------------------------------
-
+// Admin Auth: Login
 app.get(['/admin_login.php', '/admin_login'], (req, res) => {
-  if (isAdministrator(req)) {
+  if (req.session && req.session.user_id && req.session.is_admin === 1) {
     return res.redirect('/admin_dashboard.php');
   }
-
-  return renderAdminLogin(res);
+  res.render('admin_login', {
+    errors: [],
+    email: ''
+  });
 });
 
-app.post(
-  ['/admin_login.php', '/admin_login'],
-  async (req, res) => {
-    const clientIp = getClientIp(req);
-    const email = String(req.body.email || '')
-      .trim()
-      .toLowerCase();
-    const password = String(req.body.password || '');
-
-    if (!checkRateLimit(clientIp)) {
-      return renderAdminLogin(res, {
-        errors: [
-          'Too many failed attempts. Please wait five minutes.'
-        ]
-      });
-    }
-
-    if (!email || !password) {
-      recordFailedLogin(clientIp);
-
-      return renderAdminLogin(res, {
-        errors: ['Please enter admin credentials.'],
-        email
-      });
-    }
-
-    try {
-      const user = await authenticateUser(email, password);
-
-      if (!user || Number(user.is_admin) !== 1) {
-        recordFailedLogin(clientIp);
-
-        return renderAdminLogin(res, {
-          errors: ['Invalid admin credentials.'],
-          email
-        });
-      }
-
-      resetRateLimit(clientIp);
-
-      setAuthSession(req, res, {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone || '',
-        whatsapp_number:
-          user.whatsapp_number || user.phone || '',
-        is_admin: 1
-      });
-
-      return req.session.save(error => {
-        if (error) {
-          console.error('Admin session error:', error);
-          return res.status(500).send('Unable to create session.');
-        }
-
-        return res.redirect('/admin_dashboard.php');
-      });
-    } catch (error) {
-      console.error('Admin login error:', error);
-
-      return renderAdminLogin(res, {
-        errors: ['Unable to sign in at this time.'],
-        email
-      });
-    }
-  }
-);
-
-// ----------------------------------------------------
-// Admin registration
-// ----------------------------------------------------
-
-app.get(
-  ['/admin_register.php', '/admin_register'],
-  (req, res) => {
-    if (isAuthenticated(req)) {
-      return res.redirect('/index.php');
-    }
-
-    return res.render('admin_register', {
-      errors: [],
-      name: '',
+app.post(['/admin_login.php', '/admin_login'], async (req, res) => {
+  const clientIp = req.ip || req.connection.remoteAddress;
+  if (!checkRateLimit(clientIp)) {
+    return res.render('admin_login', {
+      errors: ['Too many failed attempts. Please wait 5 minutes before trying again.'],
       email: ''
     });
   }
-);
 
-app.post(
-  ['/admin_register.php', '/admin_register'],
-  async (req, res) => {
-    const name = String(req.body.name || '').trim();
-    const email = String(req.body.email || '')
-      .trim()
-      .toLowerCase();
-    const password = String(req.body.password || '');
-    const confirmation = String(req.body.confirm || '');
-    const code = String(req.body.admin_code || '').trim();
+  const emailInput = (req.body.email || '').trim().toLowerCase();
+  const password = req.body.password || '';
 
-    const errors = [];
+  const errors = [];
+  if (!emailInput || !password) {
+    errors.push('Please enter admin credentials.');
+  }
 
-    if (!name || name.length > 255) {
-      errors.push('Name is required and must be valid.');
-    }
-
-    if (!email) {
-      errors.push('Email is required.');
-    }
-
-    if (password.length < 8) {
-      errors.push('Password must be at least 8 characters.');
-    }
-
-    if (password !== confirmation) {
-      errors.push('Passwords do not match.');
-    }
-
-    if (!adminRegistrationCode || code !== adminRegistrationCode) {
-      errors.push('Invalid admin registration code.');
-    }
-
-    try {
-      if (errors.length === 0) {
-        const emailResult =
-          await validateEmailAuthenticity(email);
-
-        if (!emailResult.isValid) {
-          errors.push(
-            emailResult.error || 'Email address is invalid.'
-          );
-        }
+  let user = null;
+  if (errors.length === 0) {
+    user = await db.findUserByEmailOrUsername(emailInput);
+    if (!user || user.is_admin !== 1) {
+      recordFailedLogin(clientIp);
+      errors.push('Invalid admin credentials.');
+    } else {
+      const match = bcrypt.compareSync(password, user.password_hash);
+      if (!match) {
+        recordFailedLogin(clientIp);
+        errors.push('Invalid admin credentials.');
       }
-
-      if (errors.length === 0) {
-        const existing =
-          await db.findUserByEmailOrUsername(email);
-
-        if (existing) {
-          errors.push(
-            'This email address is already registered.'
-          );
-        }
-      }
-
-      if (errors.length > 0) {
-        return res.render('admin_register', {
-          errors,
-          name,
-          email
-        });
-      }
-
-      const passwordHash = await bcrypt.hash(password, 12);
-
-      const user = await db.createUser(
-        name,
-        email,
-        passwordHash,
-        1
-      );
-
-      if (!user?.id) {
-        throw new Error('Admin account was not created.');
-      }
-
-      setAuthSession(req, res, {
-        id: user.id,
-        name: user.name || name,
-        email: user.email || email,
-        phone: user.phone || '',
-        whatsapp_number:
-          user.whatsapp_number || user.phone || '',
-        is_admin: 1
-      });
-
-      return req.session.save(error => {
-        if (error) {
-          console.error('Admin registration session error:', error);
-          return res.status(500).send('Unable to create session.');
-        }
-
-        return res.redirect('/admin_dashboard.php');
-      });
-    } catch (error) {
-      console.error('Admin registration error:', error);
-
-      return res.render('admin_register', {
-        errors: ['Admin registration could not be completed.'],
-        name,
-        email
-      });
     }
   }
-);
-// ----------------------------------------------------
-// Password recovery
-// ----------------------------------------------------
 
-app.get(
-  ['/forgot_password.php', '/forgot_password'],
-  (req, res) => {
-    return res.render('forgot_password', {
-      errors: [],
-      success: null,
-      email: String(req.query.email || '')
+  if (errors.length > 0) {
+    return res.render('admin_login', {
+      errors,
+      email: emailInput
     });
   }
-);
 
-app.post(
-  ['/forgot_password.php', '/forgot_password'],
-  async (req, res) => {
-    const email = String(req.body.email || '')
-      .trim()
-      .toLowerCase();
+  resetRateLimit(clientIp);
 
-    const genericMessage =
-      'If the email is registered, password reset instructions ' +
-      'will be sent shortly.';
+  setAuthSession(req, res, {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    is_admin: 1
+  });
 
-    if (!email) {
-      return res.render('forgot_password', {
-        errors: ['Please enter your email address.'],
-        success: null,
-        email
-      });
-    }
+  req.session.save(() => {
+    res.redirect('/admin_dashboard.php');
+  });
+});
 
-    try {
-      const emailResult =
-        await validateEmailAuthenticity(email);
-
-      if (!emailResult.isValid) {
-        return res.render('forgot_password', {
-          errors: ['Please enter a valid email address.'],
-          success: null,
-          email
-        });
-      }
-
-      const user =
-        await db.findUserByEmailOrUsername(email);
-
-      // Do not reveal whether the account exists.
-      if (user) {
-        const otpData =
-          await db.createPasswordResetOtp(email);
-
-        await db.createNotification({
-          userId: user.id,
-          title: 'Password reset requested',
-          message:
-            'A password reset code was generated. ' +
-            'It expires in 15 minutes.',
-          type: 'system'
-        });
-
-        if (!isProduction) {
-          console.warn(
-            `[DEV] Password reset requested for ${email}. ` +
-            'Use the configured development delivery mechanism.'
-          );
-        }
-
-        // Never expose the OTP in the response.
-        void otpData;
-      }
-
-      return res.render('forgot_password', {
-        errors: [],
-        success: genericMessage,
-        email: ''
-      });
-    } catch (error) {
-      console.error('Password recovery error:', error);
-
-      return res.render('forgot_password', {
-        errors: ['Unable to process the request right now.'],
-        success: null,
-        email
-      });
-    }
+// Admin Auth: Register
+app.get(['/admin_register.php', '/admin_register'], (req, res) => {
+  if (req.session && req.session.user_id) {
+    return res.redirect('/index.php');
   }
-);
+  res.render('admin_register', {
+    errors: [],
+    name: '',
+    email: ''
+  });
+});
 
-app.get(
-  ['/reset_password.php', '/reset_password'],
-  (req, res) => {
-    const email = String(req.query.email || '')
-      .trim()
-      .toLowerCase();
+app.post(['/admin_register.php', '/admin_register'], async (req, res) => {
+  const name = (req.body.name || '').trim();
+  const email = (req.body.email || '').trim().toLowerCase();
+  const password = req.body.password || '';
+  const confirm = req.body.confirm || '';
+  const adminCode = (req.body.admin_code || '').trim();
 
-    if (!email) {
-      return res.redirect('/forgot_password.php');
+  const errors = [];
+  if (!name || !email || !password || !confirm) {
+    errors.push('All fields are required.');
+  }
+  if (!email.includes('@')) {
+    errors.push('Enter a valid email address.');
+  }
+  if (password !== confirm) {
+    errors.push('Passwords do not match.');
+  }
+  if (password.length < 6) {
+    errors.push('Password should be at least 6 characters.');
+  }
+  if (adminCode !== 'ADMIN2026' && adminCode !== '@@!!easymarketadmin!@') {
+    errors.push('Invalid admin code.');
+  }
+
+  try {
+    if (errors.length === 0) {
+      const emailCheck = await validateEmailAuthenticity(email);
+      if (!emailCheck.isValid) {
+        errors.push(emailCheck.error || 'The email address could not be verified as authentic.');
+      }
     }
 
-    return res.render('reset_password', {
+    if (errors.length === 0) {
+      const existing = await db.findUserByEmailOrUsername(email);
+      if (existing) {
+        errors.push('This email is already registered.');
+      }
+    }
+
+    if (errors.length > 0) {
+      return res.render('admin_register', {
+        errors,
+        name,
+        email
+      });
+    }
+
+    const hash = bcrypt.hashSync(password, 10);
+    const newAdmin = await db.createUser(name, email, hash, 1);
+
+    setAuthSession(req, res, {
+      id: newAdmin.id,
+      name: name,
+      email: email,
+      is_admin: 1
+    });
+
+    req.session.save(() => {
+      res.redirect('/admin_dashboard.php');
+    });
+  } catch (err) {
+    console.error('Error during admin registration:', err);
+    res.render('admin_register', {
+      errors: ['Admin registration failed: ' + (err.message || 'Please try again.')],
+      name,
+      email
+    });
+  }
+});
+
+// ----------------------------------------------------
+// PASSWORD RECOVERY WITH ONE-TIME PASSWORD (OTP)
+// ----------------------------------------------------
+
+// Request Password Reset OTP
+app.get(['/forgot_password.php', '/forgot_password'], (req, res) => {
+  res.render('forgot_password', {
+    errors: [],
+    success: null,
+    email: req.query.email || ''
+  });
+});
+
+app.post(['/forgot_password.php', '/forgot_password'], async (req, res) => {
+  const email = (req.body.email || '').trim().toLowerCase();
+  const errors = [];
+
+  if (!email) {
+    errors.push('Please enter your registered email address.');
+  }
+
+  try {
+    if (errors.length === 0) {
+      // 1. Authenticity check
+      const authCheck = await validateEmailAuthenticity(email);
+      if (!authCheck.isValid) {
+        errors.push(authCheck.error || 'The email address is invalid or not verified by Google / mail servers.');
+      }
+    }
+
+    let user = null;
+    if (errors.length === 0) {
+      // 2. Check if user exists in database
+      user = await db.findUserByEmailOrUsername(email);
+      if (!user) {
+        errors.push('No account was found with this registered email address. Please verify your address or register.');
+      }
+    }
+
+    if (errors.length > 0) {
+      return res.render('forgot_password', {
+        errors,
+        success: null,
+        email
+      });
+    }
+
+    // 3. Generate 6-digit OTP
+    const otpData = await db.createPasswordResetOtp(email);
+
+    // Create notification for user
+    await db.createNotification({
+      userId: user.id,
+      title: '🔐 Password Reset OTP Code',
+      message: `Your One-Time Password (OTP) is ${otpData.otp}. It will expire in 15 minutes.`,
+      type: 'system'
+    });
+
+    console.log(`[AUTH] Dispatched Password Reset OTP to ${email}: ${otpData.otp}`);
+
+    // Render reset view with generated OTP preview for seamless testing & verification
+    res.render('reset_password', {
       email,
       otp: '',
-      previewOtp: null,
+      previewOtp: otpData.otp,
       errors: [],
-      success: null
+      success: `A 6-digit OTP code has been dispatched to ${email}.`
+    });
+  } catch (err) {
+    console.error('Error generating password reset OTP:', err);
+    res.render('forgot_password', {
+      errors: ['Failed to process password recovery: ' + (err.message || 'Please try again.')],
+      success: null,
+      email
     });
   }
-);
+});
 
-app.post(
-  ['/reset_password.php', '/reset_password'],
-  async (req, res) => {
-    const email = String(req.body.email || '')
-      .trim()
-      .toLowerCase();
-    const otp = String(req.body.otp || '').trim();
-    const password = String(req.body.password || '');
-    const confirmation = String(
-      req.body.confirm_password || ''
-    );
+// Verify OTP & Reset Password
+app.get(['/reset_password.php', '/reset_password'], (req, res) => {
+  const email = (req.query.email || '').trim().toLowerCase();
+  if (!email) {
+    return res.redirect('/forgot_password.php');
+  }
 
-    const errors = [];
+  res.render('reset_password', {
+    email,
+    otp: req.query.otp || '',
+    previewOtp: null,
+    errors: [],
+    success: null
+  });
+});
 
-    if (!email || !/^\d{6}$/.test(otp)) {
-      errors.push('Enter a valid six-digit OTP.');
-    }
+app.post(['/reset_password.php', '/reset_password'], async (req, res) => {
+  const email = (req.body.email || '').trim().toLowerCase();
+  const otp = (req.body.otp || '').trim();
+  const password = req.body.password || '';
+  const confirmPassword = req.body.confirm_password || '';
+  const errors = [];
 
-    if (password.length < 8) {
-      errors.push('Password must be at least 8 characters.');
-    }
+  if (!email || !otp || !password || !confirmPassword) {
+    errors.push('All fields (Email, 6-digit OTP, and New Password) are required.');
+  }
 
-    if (password !== confirmation) {
-      errors.push('Passwords do not match.');
+  if (password !== confirmPassword) {
+    errors.push('The new passwords do not match.');
+  }
+
+  if (password.length < 6) {
+    errors.push('New password must be at least 6 characters.');
+  }
+
+  try {
+    if (errors.length === 0) {
+      const isValidOtp = await db.verifyPasswordResetOtp(email, otp);
+      if (!isValidOtp) {
+        errors.push('Invalid or expired OTP verification code. Please request a new code.');
+      }
     }
 
     if (errors.length > 0) {
@@ -2305,146 +1392,452 @@ app.post(
       });
     }
 
-    try {
-      const newPasswordHash =
-        await bcrypt.hash(password, 12);
+    // Hash and update password
+    const newHash = bcrypt.hashSync(password, 10);
+    await db.updateUserPassword(email, newHash);
 
-      // This method must verify and consume the OTP in one
-      // database transaction.
-      const updated =
-        await db.updateUserPassword(
-          email,
-          newPasswordHash,
-          otp
-        );
-
-      if (!updated) {
-        return res.render('reset_password', {
-          email,
-          otp: '',
-          previewOtp: null,
-          errors: [
-            'Invalid or expired OTP. Please request a new code.'
-          ],
-          success: null
-        });
-      }
-
-      const user =
-        await db.findUserByEmailOrUsername(email);
-
-      if (user) {
-        setAuthSession(req, res, {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          phone: user.phone || '',
-          whatsapp_number:
-            user.whatsapp_number || user.phone || '',
-          is_admin: user.is_admin ? 1 : 0
-        });
-      }
-
-      return req.session.save(error => {
-        if (error) {
-          console.error('Password reset session error:', error);
-          return res.status(500).send('Unable to create session.');
-        }
-
-        return res.redirect('/index.php?reset_success=1');
-      });
-    } catch (error) {
-      console.error('Password reset error:', error);
-
-      return res.render('reset_password', {
-        email,
-        otp: '',
-        previewOtp: null,
-        errors: ['Unable to reset the password right now.'],
-        success: null
+    const user = await db.findUserByEmailOrUsername(email);
+    if (user) {
+      setAuthSession(req, res, {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        is_admin: user.is_admin ? 1 : 0
       });
     }
+
+    req.session.save(() => {
+      res.redirect('/index.php?reset_success=1');
+    });
+  } catch (err) {
+    console.error('Error resetting password:', err);
+    res.render('reset_password', {
+      email,
+      otp,
+      previewOtp: null,
+      errors: ['Failed to reset password: ' + (err.message || 'Please try again.')],
+      success: null
+    });
   }
-);
+});
 
 // ----------------------------------------------------
-// Seller product management
+// SELLER / USER PRODUCT & PRICE MANAGEMENT SUITE
 // ----------------------------------------------------
 
-app.get(
-  ['/my_products.php', '/my_products', '/seller/products'],
-  async (req, res) => {
-    if (!isAuthenticated(req)) {
-      return res.redirect('/login.php?return=/my_products.php');
-    }
-
-    try {
-      const sellerId = req.session.user_id;
-      const products = await db.getProductsBySeller(sellerId);
-      const pendingRequests =
-        await db.getPendingPriceChangeRequestsForSeller(
-          sellerId
-        );
-
-      const feedback = req.session.sellerFeedback || null;
-      delete req.session.sellerFeedback;
-
-      return res.render('my_products', {
-        products,
-        pendingRequests,
-        feedback
-      });
-    } catch (error) {
-      console.error('Error loading seller products:', error);
-      return res.status(500).send('Internal Server Error');
-    }
+// Seller: View My Published Products & Pricing Proposals
+app.get(['/my_products.php', '/my_products', '/seller/products'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.redirect('/login.php?return=my_products.php');
   }
-);
 
-app.post(
-  ['/seller/update-price', '/my_products/update-price'],
-  async (req, res) => {
-    if (!isAuthenticated(req)) {
-      return res.redirect('/login.php?return=/my_products.php');
-    }
+  const userId = req.session.user_id;
+  const products = await db.getProductsBySeller(userId);
+  const pendingRequests = await db.getPendingPriceChangeRequestsForSeller(userId);
+  const feedback = req.session.sellerFeedback || null;
+  req.session.sellerFeedback = null;
 
-    const productId = parsePositiveInteger(req.body.product_id);
-    const price = Number.parseFloat(req.body.price);
-    const quantity =
-      req.body.quantity === undefined
-        ? null
-        : parseNonNegativeInteger(req.body.quantity);
+  res.render('my_products', {
+    products,
+    pendingRequests,
+    feedback
+  });
+});
 
-    if (!productId || !Number.isFinite(price) || price <= 0) {
-      req.session.sellerFeedback = {
-        type: 'error',
-        message: 'Enter a valid product and positive price.'
-      };
+// Seller: Direct Price & Stock Update (Only publisher can change their own price)
+app.post(['/seller/update-price', '/my_products/update-price'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.redirect('/login.php?return=my_products.php');
+  }
 
-      return req.session.save(() =>
-        res.redirect('/my_products.php')
-      );
-    }
+  const productId = parseInt(req.body.product_id, 10);
+  const price = req.body.price;
+  const quantity = req.body.quantity;
 
-    const result =
-      await db.updateProductPriceBySeller(
-        productId,
-        req.session.user_id,
-        price,
-        quantity
-      );
-
+  const result = await db.updateProductPriceBySeller(productId, req.session.user_id, price, quantity);
+  if (result.success) {
     req.session.sellerFeedback = {
-      type: result.success ? 'success' : 'error',
-      message: result.success
-        ? `Listing updated. Price: UGX ${Number(
-            result.newPrice
-          ).toLocaleString()}.`
-        : result.error || 'Unable to update listing.'
+      type: 'success',
+      message: `✅ Listing updated successfully! Active price is now UGX ${Number(result.newPrice).toLocaleString()}.`
     };
-
-    return req.session.save(() =>
-      res.redirect('/my_products.php')
-    );
+  } else {
+    req.session.sellerFeedback = {
+      type: 'error',
+      message: `❌ ${result.error || 'Failed to update listing.'}`
+    };
   }
-);
+
+  req.session.save(() => {
+    res.redirect('/my_products.php');
+  });
+});
+
+// Seller: Respond to Admin Price Proposal (Accept / Decline)
+app.post(['/seller/price-request/respond', '/price-request/respond'], async (req, res) => {
+  if (!req.session || !req.session.user_id) {
+    return res.redirect('/login.php?return=my_products.php');
+  }
+
+  const requestId = parseInt(req.body.request_id, 10);
+  const decision = req.body.decision; // 'Accepted' or 'Rejected'
+
+  const result = await db.resolvePriceChangeRequest(requestId, decision, req.session.user_id);
+  if (result.success) {
+    req.session.sellerFeedback = {
+      type: result.decision === 'Accepted' ? 'success' : 'info',
+      message: result.message
+    };
+  } else {
+    req.session.sellerFeedback = {
+      type: 'error',
+      message: result.error
+    };
+  }
+
+  req.session.save(() => {
+    res.redirect('/my_products.php');
+  });
+});
+
+// ----------------------------------------------------
+// ADMIN DASHBOARD & MANAGEMENT SUITE
+// ----------------------------------------------------
+
+app.get(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const allProducts = (await db.getProducts()).sort((a, b) => b.id - a.id);
+  const availableProducts = allProducts.filter(p => p.quantity > 0 && p.approved === 1);
+  const soldProducts = allProducts.filter(p => p.quantity <= 0);
+  const priceRequests = await db.getAllPriceChangeRequests();
+  const pendingPriceRequests = priceRequests.filter(r => r.status === 'Pending');
+
+  const stats = await db.getSystemStats();
+  const dbDiagnostics = await db.getSupabaseDiagnostics();
+  const supabaseRawProducts = await db.getSupabaseRawProducts(50);
+
+  const activeTab = req.query.tab || 'overview';
+  const filter = req.query.filter || 'all';
+  const customerThreads = await db.getAllCustomerMessagesForAdmin();
+
+  let displayedProducts = allProducts;
+  if (filter === 'available') {
+    displayedProducts = availableProducts;
+  } else if (filter === 'sold') {
+    displayedProducts = soldProducts;
+  }
+
+  const syncResult = req.session.syncResult || null;
+  req.session.syncResult = null;
+
+  const dbTestResult = req.session.dbTestResult || null;
+  req.session.dbTestResult = null;
+
+  const adminFeedback = req.session.adminFeedback || null;
+  req.session.adminFeedback = null;
+
+  res.render('admin_dashboard', {
+    products: displayedProducts,
+    allProductsCount: allProducts.length,
+    availableCount: availableProducts.length,
+    soldCount: soldProducts.length,
+    pendingPriceCount: pendingPriceRequests.length,
+    priceRequests,
+    filter,
+    stats,
+    activeTab,
+    customerThreads,
+    syncResult,
+    dbDiagnostics,
+    supabaseRawProducts,
+    dbTestResult,
+    adminFeedback
+  });
+});
+
+// Admin: Direct In-App Reply to Customer Message
+app.post(['/admin_dashboard/reply-message', '/admin_dashboard.php/reply-message'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const customerId = parseInt(req.body.customer_id, 10);
+  const productId = parseInt(req.body.product_id, 10) || null;
+  const message = (req.body.message || '').trim();
+
+  if (customerId && message) {
+    await db.sendMessage({
+      senderId: req.session.user_id,
+      receiverId: customerId,
+      productId: productId || null,
+      message
+    });
+  }
+
+  res.redirect('/admin_dashboard?tab=messages');
+});
+
+// Admin: Update Owner Commission / Platform Payout Share %
+app.post(['/admin_dashboard.php/commission-rate', '/admin_dashboard/commission-rate', '/admin/commission-rate'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const newRate = parseFloat(req.body.commission_rate);
+  if (!isNaN(newRate)) {
+    db.setOwnerCommissionPercentage(newRate);
+  }
+
+  res.redirect('/admin_dashboard?tab=overview');
+});
+
+// Admin: Update Order Fulfillment Status
+app.post(['/admin_dashboard.php/order-status', '/admin_dashboard/order-status', '/admin_dashboard.php/admin_dashboard.php/order-status'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const orderId = parseInt(req.body.order_id, 10);
+  const status = req.body.status;
+  if (orderId && status) {
+    await db.updateOrderStatus(orderId, status);
+  }
+
+  res.redirect('/admin_dashboard?tab=orders');
+});
+
+// Admin: Quick Product Edit & Protected Price Change Proposal Engine
+app.post(['/admin_dashboard.php/quick-product', '/admin_dashboard/quick-product', '/admin_dashboard.php/admin_dashboard.php/quick-product'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const productId = parseInt(req.body.product_id, 10);
+  if (productId) {
+    const result = await db.adminUpdateProductOrProposePrice(productId, req.session.user_id, {
+      title: req.body.title,
+      price: req.body.price,
+      quantity: req.body.quantity,
+      approved: req.body.approved,
+      reason: req.body.reason || 'Admin recommended price adjustment'
+    });
+    req.session.adminFeedback = result.message;
+  }
+
+  req.session.save(() => {
+    res.redirect('/admin_dashboard?tab=inventory');
+  });
+});
+
+// Admin: Delete Single Product (Available or Sold)
+app.post(['/admin_dashboard.php/delete-product', '/admin_dashboard/delete-product', '/admin/delete-product'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const productId = parseInt(req.body.product_id, 10);
+  if (productId) {
+    await db.deleteProduct(productId);
+    req.session.adminFeedback = `Product #${productId} listing deleted successfully.`;
+  }
+
+  req.session.save(() => {
+    res.redirect('/admin_dashboard?tab=inventory');
+  });
+});
+
+// Admin: Delete All Sold Products in Bulk
+app.post(['/admin_dashboard.php/delete-sold-products', '/admin_dashboard/delete-sold-products', '/admin/delete-sold-products'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const sold = await db.getSoldProducts();
+  let count = 0;
+  for (const p of sold) {
+    await db.deleteProduct(p.id);
+    count++;
+  }
+
+  req.session.adminFeedback = `Cleaned up catalog: Successfully deleted ${count} sold/out-of-stock product listing(s).`;
+
+  req.session.save(() => {
+    res.redirect('/admin_dashboard?tab=inventory&filter=all');
+  });
+});
+
+// Admin: Clear All Products (Clean Catalog)
+app.post(['/admin_dashboard.php/clear-all-products', '/admin_dashboard/clear-all-products', '/admin/clear-all-products'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  await db.clearAllProducts();
+  req.session.adminFeedback = 'All test products have been permanently deleted. Catalog is completely clean.';
+
+  req.session.save(() => {
+    res.redirect('/admin_dashboard?tab=inventory&filter=all');
+  });
+});
+
+// Admin: Reply to Support Ticket
+app.post(['/admin_dashboard.php/reply-ticket', '/admin_dashboard/reply-ticket', '/admin_dashboard.php/admin_dashboard.php/reply-ticket'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const ticketId = parseInt(req.body.ticket_id, 10);
+  const reply = (req.body.reply || '').trim();
+  const status = req.body.status || 'Resolved';
+
+  if (ticketId && reply) {
+    await db.replySupportTicket(ticketId, reply, status);
+  }
+
+  res.redirect('/admin_dashboard?tab=customers');
+});
+
+// Admin: Update Return/Refund Status
+app.post(['/admin_dashboard.php/return-status', '/admin_dashboard/return-status', '/admin_dashboard.php/admin_dashboard.php/return-status'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const returnId = parseInt(req.body.return_id, 10);
+  const status = req.body.status;
+  const adminNote = (req.body.admin_note || '').trim();
+
+  if (returnId && status) {
+    await db.updateReturnStatus(returnId, status, adminNote);
+  }
+
+  res.redirect('/admin_dashboard?tab=orders');
+});
+
+// Admin: Connect & Verify Supabase PostgreSQL Database Credentials
+app.post(['/admin_dashboard.php/connect-database', '/admin_dashboard/connect-database', '/admin/connect-database'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const connectionString = (req.body.connection_string || '').trim();
+  const dbPassword = (req.body.db_password || '').trim();
+  const projectRef = (req.body.project_ref || 'ijizfozhorgaidgjonws').trim();
+  const usePooler = req.body.use_pooler === '1' || req.body.use_pooler === 'true';
+
+  let input;
+  if (connectionString) {
+    input = connectionString;
+  } else if (dbPassword) {
+    input = {
+      password: dbPassword,
+      projectRef,
+      usePooler
+    };
+  } else {
+    req.session.dbTestResult = {
+      success: false,
+      error: 'Please provide either a database connection string or your Supabase database password.'
+    };
+    return req.session.save(() => {
+      res.redirect('/admin_dashboard?tab=database');
+    });
+  }
+
+  const result = await db.reconnectDatabase(input);
+  req.session.dbTestResult = result;
+  if (result.success) {
+    req.session.adminFeedback = '🎉 Supabase PostgreSQL Database Connected & Synchronized Successfully! Your uploaded products are now live in Supabase.';
+  } else {
+    req.session.adminFeedback = `⚠️ Connection Attempt Failed: ${result.error}`;
+  }
+
+  req.session.save(() => {
+    res.redirect('/admin_dashboard?tab=database');
+  });
+});
+
+// Admin: Force Sync Database & Validate PostgreSQL/Supabase Tables
+app.post(['/admin_dashboard.php/sync-database', '/admin_dashboard/sync-database', '/admin/sync-database'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  try {
+    const result = await db.syncDatabase();
+    req.session.syncResult = result;
+    if (result.success) {
+      req.session.adminFeedback = `✅ Sync Complete: ${result.counts ? result.counts.products : 0} product listings and tables verified in Supabase!`;
+    }
+  } catch (err) {
+    req.session.syncResult = { success: false, error: err.message };
+    req.session.adminFeedback = `⚠️ Sync Failed: ${err.message}`;
+  }
+
+  const targetTab = req.query.tab || req.body.return_tab || 'database';
+  req.session.save(() => {
+    res.redirect(`/admin_dashboard?tab=${targetTab}&synced=1`);
+  });
+});
+
+// JSON API endpoint for live database health checks
+app.get('/api/database/status', async (req, res) => {
+  const diag = await db.getSupabaseDiagnostics();
+  res.json(diag);
+});
+
+// JSON API endpoint to actively test if the database is ALIVE or SLEEPING
+app.get('/api/database/test', async (req, res) => {
+  const result = await db.testDatabaseConnection();
+  res.json(result);
+});
+
+// Admin interactive database ping/test route
+app.post(['/admin_dashboard/test-database', '/admin_dashboard.php/test-database'], async (req, res) => {
+  const result = await db.testDatabaseConnection();
+  req.session.dbTestResult = result;
+  if (result.alive) {
+    req.session.adminFeedback = `🟢 Supabase Database is ALIVE & responding in ${result.latencyMs}ms!`;
+  } else if (result.isSleeping) {
+    req.session.adminFeedback = `💤 Supabase Database is SLEEPING / PAUSED (Inactivity Pause). Open your Supabase dashboard to restore/wake it up.`;
+  } else {
+    req.session.adminFeedback = `⚠️ Database Check: ${result.error || result.message}`;
+  }
+  req.session.save(() => {
+    res.redirect('/admin_dashboard?tab=database');
+  });
+});
+
+// Admin legacy stock/delete handler
+app.post(['/admin_dashboard.php', '/admin_dashboard'], async (req, res) => {
+  if (!req.session || !req.session.user_id || req.session.is_admin !== 1) {
+    return res.redirect('/admin_login.php');
+  }
+
+  const productId = parseInt(req.body.product_id, 10);
+  if (req.body.update_quantity) {
+    const newQty = parseInt(req.body.quantity, 10) || 0;
+    await db.updateProductQuantity(productId, newQty);
+  } else if (req.body.delete_product) {
+    await db.deleteProduct(productId);
+  }
+
+  res.redirect('/admin_dashboard?tab=inventory');
+});
+
+// Logout
+app.get(['/logout.php', '/logout'], (req, res) => {
+  clearAuthSession(req, res);
+  res.redirect('/index.php');
+});
+
+// Start HTTP Server immediately so port 3000 is open and responsive instantly
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`EasyMarket server running on http://0.0.0.0:${PORT}`);
+  // Initialize and migrate database in background without stalling HTTP requests
+  initDatabase().catch(err => {
+    console.log('[DB NOTICE] Background database initialization status:', err.message);
+  });
+});
