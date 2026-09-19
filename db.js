@@ -1,6 +1,7 @@
 const { Pool } = require('pg');
 const { createClient } = require('@supabase/supabase-js');
 const bcrypt = require('bcryptjs');
+const { generateOtp } = require('./config');
 const fs = require('fs');
 const path = require('path');
 
@@ -1748,7 +1749,9 @@ const db = {
       }
       pool = testPool;
       rawConnectionString = connStr;
-      saveConnectionStringToDisk(connStr);
+      saveDbConfigToDisk({
+  connectionString: connStr
+});
       isConnectedToPostgres = true;
       lastDbError = null;
       lastDbErrorCode = null;
