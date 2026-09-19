@@ -311,37 +311,43 @@ async function initDatabase() {
         CREATE TABLE IF NOT EXISTS product_images (
           id SERIAL PRIMARY KEY,
           product_id INT,
-          image_path VARCHAR(255),
           image_url TEXT,
-          is_main BOOLEAN DEFAULT FALSE
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS orders (
           id SERIAL PRIMARY KEY,
           user_id INT,
-          total NUMERIC(15,2) NOT NULL DEFAULT 0,
-          status VARCHAR(50) DEFAULT 'Pending',
-          address TEXT,
+          user_name VARCHAR(255),
+          user_email VARCHAR(255),
           phone VARCHAR(100),
-          payment_reference VARCHAR(255),
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          whatsapp_number VARCHAR(100),
+          total NUMERIC(15,2) DEFAULT 0,
+          status VARCHAR(50) DEFAULT 'Pending',
+          payment_method VARCHAR(100),
+          payment_status VARCHAR(50) DEFAULT 'Pending',
+          delivery_address TEXT,
+          notes TEXT,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS order_items (
           id SERIAL PRIMARY KEY,
           order_id INT,
           product_id INT,
-          title VARCHAR(255) NOT NULL,
-          price NUMERIC(15,2) NOT NULL,
-          quantity INT NOT NULL DEFAULT 1,
-          image VARCHAR(255)
+          title VARCHAR(255),
+          price NUMERIC(15,2) DEFAULT 0,
+          quantity INT DEFAULT 1,
+          image VARCHAR(255),
+          image_url TEXT
         );
 
         CREATE TABLE IF NOT EXISTS notifications (
           id SERIAL PRIMARY KEY,
           user_id INT,
-          title VARCHAR(255) NOT NULL,
-          message TEXT NOT NULL,
+          title VARCHAR(255),
+          message TEXT,
           type VARCHAR(50) DEFAULT 'system',
           is_read INT DEFAULT 0,
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -352,7 +358,7 @@ async function initDatabase() {
           sender_id INT,
           receiver_id INT,
           product_id INT,
-          message TEXT NOT NULL,
+          message TEXT,
           is_read INT DEFAULT 0,
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
@@ -362,8 +368,8 @@ async function initDatabase() {
           user_id INT,
           user_name VARCHAR(255),
           user_email VARCHAR(255),
-          subject VARCHAR(255) NOT NULL,
-          message TEXT NOT NULL,
+          subject VARCHAR(255),
+          message TEXT,
           status VARCHAR(50) DEFAULT 'Open',
           admin_reply TEXT,
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -374,7 +380,7 @@ async function initDatabase() {
           id SERIAL PRIMARY KEY,
           order_id INT,
           user_id INT,
-          reason TEXT NOT NULL,
+          reason TEXT,
           amount NUMERIC(15,2) DEFAULT 0,
           status VARCHAR(50) DEFAULT 'Pending',
           admin_note TEXT,
@@ -383,40 +389,35 @@ async function initDatabase() {
 
         CREATE TABLE IF NOT EXISTS campaigns (
           id SERIAL PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          code VARCHAR(50) NOT NULL,
-          discount_percent INT DEFAULT 10,
+          name VARCHAR(255),
+          description TEXT,
+          discount NUMERIC(10,2) DEFAULT 0,
           status VARCHAR(50) DEFAULT 'Active',
-          clicks INT DEFAULT 0,
-          conversions INT DEFAULT 0,
-          start_date VARCHAR(50),
-          end_date VARCHAR(50)
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS price_change_requests (
           id SERIAL PRIMARY KEY,
-          product_id INT NOT NULL,
-          seller_id INT NOT NULL,
-          requested_by INT NOT NULL,
-          current_price NUMERIC(15,2) NOT NULL,
-          proposed_price NUMERIC(15,2) NOT NULL,
+          product_id INT,
+          seller_id INT,
+          current_price NUMERIC(15,2) DEFAULT 0,
+          proposed_price NUMERIC(15,2) DEFAULT 0,
           reason TEXT,
           status VARCHAR(50) DEFAULT 'Pending',
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           resolved_at TIMESTAMPTZ
         );
 
         CREATE TABLE IF NOT EXISTS password_resets (
           id SERIAL PRIMARY KEY,
           email VARCHAR(255) NOT NULL,
-          otp_code VARCHAR(10) NOT NULL,
+          otp_code VARCHAR(20) NOT NULL,
           expires_at TIMESTAMPTZ NOT NULL,
           used INT DEFAULT 0,
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
       `);
 
-      // 2. Safely ALTER existing Supabase tables so all columns are present (compatible with both pre-existing Supabase tables and our schema)
+      // 2. Add missing columns to existing tables
       const columnAlterStatements = [
         // users table
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'customer'",
@@ -424,13 +425,11 @@ async function initDatabase() {
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(100)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(100)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS has_whatsapp BOOLEAN DEFAULT TRUE",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
 
         // products table
-        "ALTER TABLE products ADD COLUMN IF NOT EXISTS image VARCHAR(255)",
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT",
-        "ALTER TABLE products ADD COLUMN IF NOT EXISTS condition VARCHAR(100) DEFAULT 'Brand New'",
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS location VARCHAR(255) DEFAULT 'Kampala, Uganda'",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS condition VARCHAR(100) DEFAULT 'Brand New'",
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS phone VARCHAR(100)",
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS seller_phone VARCHAR(100)",
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(100)",
@@ -438,33 +437,19 @@ async function initDatabase() {
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS approved INT DEFAULT 1",
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS quantity INT DEFAULT 1",
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS seller_id INT",
-        "ALTER TABLE products ADD COLUMN IF NOT EXISTS category_id INT",
-        "ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
 
-        // product_images table (Supports both image_url and image_path)
-        "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS product_id INT",
-        "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS image_path VARCHAR(255)",
-        "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS image_url TEXT",
-        "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS is_main BOOLEAN DEFAULT FALSE",
-
-        // orders table (Ensures both user_id & buyer_id, total & total_amount, address & delivery_address exist)
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_id INT",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS buyer_id INT",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS buyer_name VARCHAR(255)",
+        // orders table
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_name VARCHAR(255)",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_email VARCHAR(255)",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS phone VARCHAR(100)",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS buyer_phone VARCHAR(100)",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS address TEXT",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS total NUMERIC(15,2) DEFAULT 0",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_amount NUMERIC(15,2) DEFAULT 0",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(100)",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(100)",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(100)",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Pending'",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'Pending'",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes TEXT",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
 
         // order_items table
-        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS order_id INT",
         "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_id INT",
         "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS title VARCHAR(255)",
         "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS price NUMERIC(15,2) DEFAULT 0",
@@ -514,27 +499,68 @@ async function initDatabase() {
       const catCountRes = await client.query('SELECT COUNT(*) FROM categories');
       if (parseInt(catCountRes.rows[0].count, 10) === 0) {
         for (const cat of memCategories) {
-          await client.query('INSERT INTO categories (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING', [cat.id, cat.name]);
+          await client.query(
+            'INSERT INTO categories (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING',
+            [cat.id, cat.name]
+          );
         }
         try {
-          await client.query("SELECT setval('categories_id_seq', (SELECT COALESCE(MAX(id), 1) FROM categories))");
+          await client.query(
+            "SELECT setval('categories_id_seq', (SELECT COALESCE(MAX(id), 1) FROM categories))"
+          );
         } catch {}
       }
 
-      // 4. Seed admin user if not already present (Dual-setting role='admin' and is_admin=1)
-      const userRes = await client.query('SELECT * FROM users WHERE LOWER(email) = $1', [ADMIN_USERNAME.toLowerCase()]);
+      // 4. Seed admin user if not already present
+      const userRes = await client.query(
+        'SELECT * FROM users WHERE LOWER(email) = $1',
+        [ADMIN_USERNAME.toLowerCase()]
+      );
+
       if (userRes.rows.length === 0) {
         try {
           await client.query(`
-            INSERT INTO users (name, email, password_hash, role, is_admin, phone, whatsapp_number, has_whatsapp)
-            VALUES ($1, $2, $3, 'admin', 1, '+256 763 480495', '256763480495', TRUE)
-          `, ['EasyMarket Admin', ADMIN_USERNAME.toLowerCase(), adminPasswordHash]);
+            INSERT INTO users (
+              name,
+              email,
+              password_hash,
+              role,
+              is_admin,
+              phone,
+              whatsapp_number,
+              has_whatsapp
+            )
+            VALUES (
+              $1,
+              $2,
+              $3,
+              'admin',
+              1,
+              '+256 763 480495',
+              '256763480495',
+              TRUE
+            )
+          `, [
+            'EasyMarket Admin',
+            ADMIN_USERNAME.toLowerCase(),
+            adminPasswordHash
+          ]);
         } catch (err) {
           console.warn('Admin user insert fallback:', err.message);
+
           await client.query(`
-            INSERT INTO users (name, email, password_hash, role)
+            INSERT INTO users (
+              name,
+              email,
+              password_hash,
+              role
+            )
             VALUES ($1, $2, $3, 'admin')
-          `, ['EasyMarket Admin', ADMIN_USERNAME.toLowerCase(), adminPasswordHash]);
+          `, [
+            'EasyMarket Admin',
+            ADMIN_USERNAME.toLowerCase(),
+            adminPasswordHash
+          ]);
         }
       }
 
@@ -547,8 +573,40 @@ async function initDatabase() {
           WHERE p.seller_id IS NULL 
             AND u.is_admin = 0
             AND (
-              RIGHT(REGEXP_REPLACE(COALESCE(p.phone,''), '[^0-9]', '', 'g'), 9) = RIGHT(REGEXP_REPLACE(COALESCE(u.phone,''), '[^0-9]', '', 'g'), 9)
-              OR RIGHT(REGEXP_REPLACE(COALESCE(p.seller_phone,''), '[^0-9]', '', 'g'), 9) = RIGHT(REGEXP_REPLACE(COALESCE(u.phone,''), '[^0-9]', '', 'g'), 9)
+              RIGHT(
+                REGEXP_REPLACE(
+                  COALESCE(p.phone,''),
+                  '[^0-9]',
+                  '',
+                  'g'
+                ),
+                9
+              ) = RIGHT(
+                REGEXP_REPLACE(
+                  COALESCE(u.phone,''),
+                  '[^0-9]',
+                  '',
+                  'g'
+                ),
+                9
+              )
+              OR RIGHT(
+                REGEXP_REPLACE(
+                  COALESCE(p.seller_phone,''),
+                  '[^0-9]',
+                  '',
+                  'g'
+                ),
+                9
+              ) = RIGHT(
+                REGEXP_REPLACE(
+                  COALESCE(u.phone,''),
+                  '[^0-9]',
+                  '',
+                  'g'
+                ),
+                9
+              )
             )
         `);
 
@@ -565,88 +623,175 @@ async function initDatabase() {
           WHERE quantity IS NULL OR quantity < 0;
         `);
       } catch (linkErr) {
-        console.warn('Non-blocking product auto-link notice:', linkErr.message);
+        console.warn(
+          'Non-blocking product auto-link notice:',
+          linkErr.message
+        );
       }
 
       // 6. Pre-cache all products & categories from PostgreSQL into memory cache
       try {
-        const catRes = await client.query('SELECT * FROM categories ORDER BY id ASC');
+        const catRes = await client.query(
+          'SELECT * FROM categories ORDER BY id ASC'
+        );
+
         if (catRes.rows.length > 0) {
           memCategories = catRes.rows;
         }
 
         const prodRes = await client.query(`
-          SELECT p.*, c.name as category_name, u.name as seller_name, u.email as seller_email, u.phone as seller_user_phone, u.whatsapp_number as seller_user_whatsapp
+          SELECT
+            p.*,
+            c.name as category_name,
+            u.name as seller_name,
+            u.email as seller_email,
+            u.phone as seller_user_phone,
+            u.whatsapp_number as seller_user_whatsapp
           FROM products p 
           LEFT JOIN categories c ON p.category_id = c.id 
           LEFT JOIN users u ON p.seller_id = u.id
           ORDER BY p.id DESC
         `);
+
         if (prodRes.rows.length > 0) {
           memProducts = prodRes.rows.map(r => ({
             ...r,
-            price: isNaN(parseFloat(r.price)) ? 0 : parseFloat(r.price),
-            quantity: isNaN(parseInt(r.quantity, 10)) ? 1 : Math.max(0, parseInt(r.quantity, 10)),
-            approved: (r.approved === true || r.approved === 1 || r.approved === '1' || r.approved == null || r.approved === 'true') ? 1 : 0,
+            price: isNaN(parseFloat(r.price))
+              ? 0
+              : parseFloat(r.price),
+
+            quantity: isNaN(parseInt(r.quantity, 10))
+              ? 1
+              : Math.max(0, parseInt(r.quantity, 10)),
+
+            approved:
+              (
+                r.approved === true ||
+                r.approved === 1 ||
+                r.approved === '1' ||
+                r.approved == null ||
+                r.approved === 'true'
+              )
+                ? 1
+                : 0,
+
             category_name: r.category_name || 'General'
           }));
         }
       } catch (cacheErr) {
-        console.warn('Memory cache warm-up notice:', cacheErr.message);
+        console.warn(
+          'Memory cache warm-up notice:',
+          cacheErr.message
+        );
       }
 
       isConnectedToPostgres = true;
       lastDbError = null;
       lastDbErrorCode = null;
       lastDbSuccessTime = new Date();
-      console.log('✅ PostgreSQL / Supabase Database Connected & Synchronized Successfully!');
+
+      console.log(
+        '✅ PostgreSQL / Supabase Database Connected & Synchronized Successfully!'
+      );
+
     } finally {
       client.release();
     }
+
   } catch (err) {
     lastDbError = err.message;
     lastDbErrorCode = err.code || null;
-    console.warn('Could not connect to PostgreSQL server. Falling back to in-memory store:', err.message);
+
+    console.warn(
+      'Could not connect to PostgreSQL server. Falling back to in-memory store:',
+      err.message
+    );
+
     isConnectedToPostgres = false;
   }
 }
 
 function formatProductRow(r) {
   if (!r) return null;
+
   const rawImg = r.image_url || r.image;
+
   let finalImage = 'phone-front.svg';
-  if (rawImg && (rawImg.startsWith('data:') || rawImg.startsWith('http') || rawImg.startsWith('/'))) {
+
+  if (
+    rawImg &&
+    (
+      rawImg.startsWith('data:') ||
+      rawImg.startsWith('http') ||
+      rawImg.startsWith('/')
+    )
+  ) {
     finalImage = rawImg;
   } else if (rawImg) {
     finalImage = `/uploads/${rawImg}`;
   }
-  const sellerWa = r.whatsapp_number || r.seller_user_whatsapp || r.seller_user_phone || r.seller_phone || r.phone || '';
+
+  const sellerWa =
+    r.whatsapp_number ||
+    r.seller_user_whatsapp ||
+    r.seller_user_phone ||
+    r.seller_phone ||
+    r.phone ||
+    '';
+
   return {
     ...r,
     image: finalImage,
     image_url: finalImage,
-    price: isNaN(parseFloat(r.price)) ? 0 : parseFloat(r.price),
-    quantity: isNaN(parseInt(r.quantity, 10)) ? 1 : Math.max(0, parseInt(r.quantity, 10)),
-    approved: (r.approved === true || r.approved === 1 || r.approved === '1' || r.approved == null || r.approved === 'true') ? 1 : 0,
+
+    price: isNaN(parseFloat(r.price))
+      ? 0
+      : parseFloat(r.price),
+
+    quantity: isNaN(parseInt(r.quantity, 10))
+      ? 1
+      : Math.max(0, parseInt(r.quantity, 10)),
+
+    approved:
+      (
+        r.approved === true ||
+        r.approved === 1 ||
+        r.approved === '1' ||
+        r.approved == null ||
+        r.approved === 'true'
+      )
+        ? 1
+        : 0,
+
     category_name: r.category_name || 'General',
     whatsapp_number: sellerWa
   };
 }
 
-// Format Uganda WhatsApp phone number cleanly (e.g. "+256 701 234567" or "0701234567" -> "256701234567")
+// Format Uganda WhatsApp phone number cleanly
+// e.g. "+256 701 234567" or "0701234567" -> "256701234567"
 function sanitizeWhatsAppNumber(phone) {
   if (!phone) return '';
-  let cleaned = phone.toString().replace(/[^0-9]/g, '');
+
+  let cleaned = phone
+    .toString()
+    .replace(/[^0-9]/g, '');
+
   if (!cleaned) return '';
+
   if (cleaned.startsWith('00256')) {
     cleaned = cleaned.substring(2);
   } else if (cleaned.startsWith('256')) {
     // Keep 256...
-  } else if (cleaned.startsWith('0') && (cleaned.length === 10 || cleaned.length === 11)) {
+  } else if (
+    cleaned.startsWith('0') &&
+    (cleaned.length === 10 || cleaned.length === 11)
+  ) {
     cleaned = '256' + cleaned.substring(1);
   } else if (cleaned.length === 9) {
     cleaned = '256' + cleaned;
   }
+
   return cleaned;
 }
 
@@ -655,10 +800,14 @@ const db = {
 
   async getCategories() {
     try {
-      const res = await executePgQuery('SELECT * FROM categories ORDER BY id ASC');
+      const res = await executePgQuery(
+        'SELECT * FROM categories ORDER BY id ASC'
+      );
+
       if (res.rows.length > 0) {
         memCategories = res.rows;
       }
+
       return res.rows;
     } catch (err) {
       return memCategories;
@@ -667,9 +816,15 @@ const db = {
 
   async getCategoryById(id) {
     const cId = parseInt(id, 10);
+
     if (!cId) return null;
+
     try {
-      const res = await executePgQuery('SELECT * FROM categories WHERE id = $1', [cId]);
+      const res = await executePgQuery(
+        'SELECT * FROM categories WHERE id = $1',
+        [cId]
+      );
+
       return res.rows[0] || null;
     } catch (err) {
       return memCategories.find(c => c.id === cId) || null;
@@ -679,43 +834,63 @@ const db = {
   async getProducts(filterFn = null) {
     try {
       const res = await executePgQuery(`
-        SELECT p.*, c.name as category_name, u.name as seller_name, u.email as seller_email, u.phone as seller_user_phone, u.whatsapp_number as seller_user_whatsapp
+        SELECT
+          p.*,
+          c.name as category_name,
+          u.name as seller_name,
+          u.email as seller_email,
+          u.phone as seller_user_phone,
+          u.whatsapp_number as seller_user_whatsapp
         FROM products p 
         LEFT JOIN categories c ON p.category_id = c.id 
         LEFT JOIN users u ON p.seller_id = u.id
         ORDER BY p.id DESC
       `);
+
       let list = res.rows.map(formatProductRow);
+
       // Keep memory cache updated with real database records
       memProducts = [...list];
 
       if (filterFn) {
         list = list.filter(filterFn);
       }
+
       return list;
     } catch (err) {
-      console.warn('Using cached products due to fetch error:', err.message);
+      console.warn(
+        'Using cached products due to fetch error:',
+        err.message
+      );
+
       let list = memProducts.map(p => {
-        const cat = memCategories.find(c => c.id === p.category_id);
+        const cat = memCategories.find(
+          c => c.id === p.category_id
+        );
+
         return formatProductRow({
           ...p,
-          category_name: cat ? cat.name : (p.category_name || 'General')
+          category_name:
+            p.category_name ||
+            (cat ? cat.name : 'General')
         });
       });
+
       if (filterFn) {
         list = list.filter(filterFn);
       }
+
       return list;
     }
   },
-
-  async getAllProducts() {
+    async getAllProducts() {
     return this.getProducts();
   },
 
   async getProductById(id) {
     const pId = parseInt(id, 10);
     if (!pId) return null;
+
     try {
       const res = await executePgQuery(`
         SELECT p.*, c.name as category_name, u.name as seller_name, u.email as seller_email, u.phone as seller_user_phone, u.whatsapp_number as seller_user_whatsapp
@@ -724,12 +899,18 @@ const db = {
         LEFT JOIN users u ON p.seller_id = u.id
         WHERE p.id = $1
       `, [pId]);
+
       if (res.rows.length === 0) return null;
+
       return formatProductRow(res.rows[0]);
+
     } catch (err) {
       const p = memProducts.find(item => item.id === pId);
+
       if (!p) return null;
+
       const cat = memCategories.find(c => c.id === p.category_id);
+
       return formatProductRow({
         ...p,
         category_name: cat ? cat.name : (p.category_name || 'General')
@@ -740,17 +921,32 @@ const db = {
   async getProductImages(productId) {
     const pId = parseInt(productId, 10);
     if (!pId) return [];
+
     try {
-      const res = await executePgQuery('SELECT id, product_id, image_path, image_url, is_main FROM product_images WHERE product_id = $1 ORDER BY is_main DESC, id ASC', [pId]);
+      const res = await executePgQuery(
+        'SELECT id, product_id, image_path, image_url, is_main FROM product_images WHERE product_id = $1 ORDER BY is_main DESC, id ASC',
+        [pId]
+      );
+
       if (res.rows.length > 0) {
         return res.rows.map(img => {
           const raw = img.image_url || img.image_path;
+
           let formatted = '/phone-front.svg';
-          if (raw && (raw.startsWith('data:') || raw.startsWith('http') || raw.startsWith('/'))) {
+
+          if (
+            raw &&
+            (
+              raw.startsWith('data:') ||
+              raw.startsWith('http') ||
+              raw.startsWith('/')
+            )
+          ) {
             formatted = raw;
           } else if (raw) {
             formatted = `/uploads/${raw}`;
           }
+
           return {
             ...img,
             image_path: formatted,
@@ -758,29 +954,69 @@ const db = {
           };
         });
       }
-      const prodRes = await executePgQuery('SELECT image_url, image FROM products WHERE id = $1', [pId]);
+
+      const prodRes = await executePgQuery(
+        'SELECT image_url, image FROM products WHERE id = $1',
+        [pId]
+      );
+
       if (prodRes.rows.length > 0) {
-        const raw = prodRes.rows[0].image_url || prodRes.rows[0].image;
+        const raw =
+          prodRes.rows[0].image_url ||
+          prodRes.rows[0].image;
+
         let formatted = '/phone-front.svg';
-        if (raw && (raw.startsWith('data:') || raw.startsWith('http') || raw.startsWith('/'))) {
+
+        if (
+          raw &&
+          (
+            raw.startsWith('data:') ||
+            raw.startsWith('http') ||
+            raw.startsWith('/')
+          )
+        ) {
           formatted = raw;
         } else if (raw) {
           formatted = `/uploads/${raw}`;
         }
-        return [{ id: 0, product_id: pId, image_path: formatted, image_url: formatted, is_main: 1 }];
+
+        return [{
+          id: 0,
+          product_id: pId,
+          image_path: formatted,
+          image_url: formatted,
+          is_main: 1
+        }];
       }
+
       return [];
+
     } catch (err) {
-      const memList = memProductImages.filter(img => img.product_id === pId);
+      const memList = memProductImages.filter(
+        img => img.product_id === pId
+      );
+
       if (memList.length > 0) {
         return memList.map(img => {
-          const raw = img.image_url || img.image_path;
+          const raw =
+            img.image_url ||
+            img.image_path;
+
           let formatted = '/phone-front.svg';
-          if (raw && (raw.startsWith('data:') || raw.startsWith('http') || raw.startsWith('/'))) {
+
+          if (
+            raw &&
+            (
+              raw.startsWith('data:') ||
+              raw.startsWith('http') ||
+              raw.startsWith('/')
+            )
+          ) {
             formatted = raw;
           } else if (raw) {
             formatted = `/uploads/${raw}`;
           }
+
           return {
             ...img,
             image_path: formatted,
@@ -788,17 +1024,523 @@ const db = {
           };
         });
       }
-      const p = memProducts.find(item => item.id === pId);
+
+      const p = memProducts.find(
+        item => item.id === pId
+      );
+
+      if (p) {
+        const raw =
+          p.image_url ||
+          p.image;
+
+        let formatted = '/phone-front.svg';
+
+        if (
+          raw &&
+          (
+            raw.startsWith('data:') ||
+            raw.startsWith('http') ||
+            raw.startsWith('/')
+          )
+        ) {
+          formatted = raw;
+        } else if (raw) {
+          formatted = `/uploads/${raw}`;
+        }
+
+        return [{
+          id: 0,
+          product_id: pId,
+          image_path: formatted,
+          image_url: formatted,
+          is_main: 1
+        }];
+      }
+
+      return [];
+    }
+  },
+
+  async addProduct(data) {
+    const {
+      title,
+      description,
+      price,
+      image,
+      image_url,
+      category_id,
+      location,
+      condition,
+      phone,
+      seller_phone,
+      whatsapp_number,
+      payment_code,
+      approved = 1,
+      quantity = 1,
+      seller_id
+    } = data || {};
+
+    try {
+      const res = await executePgQuery(`
+        INSERT INTO products (
+          title,
+          description,
+          price,
+          image,
+          image_url,
+          category_id,
+          location,
+          condition,
+          phone,
+          seller_phone,
+          whatsapp_number,
+          payment_code,
+          approved,
+          quantity,
+          seller_id
+        )
+        VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15
+        )
+        RETURNING *
+      `, [
+        title,
+        description || '',
+        parseFloat(price) || 0,
+        image || null,
+        image_url || image || null,
+        category_id || null,
+        location || 'Kampala, Uganda',
+        condition || 'Brand New',
+        phone || null,
+        seller_phone || phone || null,
+        whatsapp_number || '',
+        payment_code || null,
+        approved ? 1 : 0,
+        parseInt(quantity, 10) || 1,
+        seller_id || null
+      ]);
+
+      const product = formatProductRow(res.rows[0]);
+
+      memProducts.unshift(product);
+
+      return product;
+
+    } catch (err) {
+      const newProduct = {
+        id: memNextProdId++,
+        title,
+        description: description || '',
+        price: parseFloat(price) || 0,
+        image: image || image_url || 'phone-front.svg',
+        image_url: image_url || image || 'phone-front.svg',
+        category_id: category_id || null,
+        location: location || 'Kampala, Uganda',
+        condition: condition || 'Brand New',
+        phone: phone || '',
+        seller_phone: seller_phone || phone || '',
+        whatsapp_number: whatsapp_number || '',
+        payment_code: payment_code || '',
+        approved: approved ? 1 : 0,
+        quantity: parseInt(quantity, 10) || 1,
+        seller_id: seller_id || null,
+        created_at: new Date()
+      };
+
+      memProducts.unshift(newProduct);
+
+      return formatProductRow(newProduct);
+    }
+  },
+
+  async updateProduct(id, data) {
+    const pId = parseInt(id, 10);
+
+    if (!pId) {
+      return null;
+    }
+
+    const existing = await this.getProductById(pId);
+
+    if (!existing) {
+      return null;
+    }
+
+    const updated = {
+      ...existing,
+      ...data,
+      id: pId
+    };
+
+    try {
+      const res = await executePgQuery(`
+        UPDATE products
+        SET
+          title = $1,
+          description = $2,
+          price = $3,
+          image = $4,
+          image_url = $5,
+          category_id = $6,
+          location = $7,
+          condition = $8,
+          phone = $9,
+          seller_phone = $10,
+          whatsapp_number = $11,
+          payment_code = $12,
+          approved = $13,
+          quantity = $14,
+          seller_id = $15
+        WHERE id = $16
+        RETURNING *
+      `, [
+        updated.title,
+        updated.description || '',
+        parseFloat(updated.price) || 0,
+        updated.image || null,
+        updated.image_url || updated.image || null,
+        updated.category_id || null,
+        updated.location || 'Kampala, Uganda',
+        updated.condition || 'Brand New',
+        updated.phone || null,
+        updated.seller_phone || updated.phone || null,
+        updated.whatsapp_number || '',
+        updated.payment_code || null,
+        updated.approved ? 1 : 0,
+        parseInt(updated.quantity, 10) || 1,
+        updated.seller_id || null,
+        pId
+      ]);
+
+      if (res.rows.length > 0) {
+        const product = formatProductRow(res.rows[0]);
+
+        const index = memProducts.findIndex(
+          p => p.id === pId
+        );
+
+        if (index >= 0) {
+          memProducts[index] = product;
+        }
+
+        return product;
+      }
+
+    } catch (err) {
+      console.warn(
+        'Database update failed, using memory fallback:',
+        err.message
+      );
+    }
+
+    const index = memProducts.findIndex(
+      p => p.id === pId
+    );
+
+    if (index >= 0) {
+      memProducts[index] = updated;
+      return formatProductRow(updated);
+    }
+
+    return formatProductRow(updated);
+  },
+
+  async deleteProduct(id) {
+    const pId = parseInt(id, 10);
+
+    if (!pId) {
+      return false;
+    }
+
+    try {
+      await executePgQuery(
+        'DELETE FROM product_images WHERE product_id = $1',
+        [pId]
+      );
+
+      await executePgQuery(
+        'DELETE FROM products WHERE id = $1',
+        [pId]
+      );
+
+      memProducts = memProducts.filter(
+        p => p.id !== pId
+      );
+
+      memProductImages = memProductImages.filter(
+        img => img.product_id !== pId
+      );
+
+      return true;
+
+    } catch (err) {
+      console.warn(
+        'Database product delete failed:',
+        err.message
+      );
+
+      const before = memProducts.length;
+
+      memProducts = memProducts.filter(
+        p => p.id !== pId
+      );
+
+      memProductImages = memProductImages.filter(
+        img => img.product_id !== pId
+      );
+
+      return memProducts.length < before;
+    }
+  },
+
+  async addProductImage(data) {
+    const {
+      product_id,
+      image_path,
+      image_url,
+      is_main = false
+    } = data || {};
+
+    const pId = parseInt(product_id, 10);
+
+    if (!pId) {
+      return null;
+    }
+
+    try {
+      const res = await executePgQuery(`
+        INSERT INTO product_images (
+          product_id,
+          image_path,
+          image_url,
+          is_main
+        )
+        VALUES ($1, $2, $3, $4)
+        RETURNING *
+      `, [
+        pId,
+        image_path || null,
+        image_url || image_path || null,
+        is_main ? true : false
+      ]);
+
+      const row = res.rows[0];
+
+      memProductImages.push(row);
+
+      return row;
+
+    } catch (err) {
+      const row = {
+        id: memNextImgId++,
+        product_id: pId,
+        image_path: image_path || null,
+        image_url: image_url || image_path || null,
+        is_main: is_main ? true : false
+      };
+
+      memProductImages.push(row);
+
+      return row;
+    }
+  },
+
+  async deleteProductImage(id) {
+    const imgId = parseInt(id, 10);
+
+    if (!imgId) {
+      return false;
+    }
+
+    try {
+      await executePgQuery(
+        'DELETE FROM product_images WHERE id = $1',
+        [imgId]
+      );
+
+      memProductImages = memProductImages.filter(
+        img => img.id !== imgId
+      );
+
+      return true;
+
+    } catch (err) {
+      const before = memProductImages.length;
+
+      memProductImages = memProductImages.filter(
+        img => img.id !== imgId
+      );
+
+      return memProductImages.length < before;
+    }
+  },
+
+  async getUsers() {
+    try {
+      const res = await executePgQuery(
+        'SELECT * FROM users ORDER BY id ASC'
+      );
+
+      if (res.rows.length > 0) {
+        memUsers = res.rows;
+      }
+
+      return res.rows;
+
+    } catch (err) {
+      return memUsers;
+    }
+  },
+
+  async getUserById(id) {
+    const userId = parseInt(id, 10);
+
+    if (!userId) {
+      return null;
+    }
+
+    try {
+      const res = await executePgQuery(
+        'SELECT * FROM users WHERE id = $1',
+        [userId]
+      );
+
+      return res.rows[0] || null;
+
+    } catch (err) {
+      return memUsers.find(
+        u => u.id === userId
+      ) || null;
+    }
+  },
+
+  async getUserByEmail(email) {
+    const cleanEmail =
+      (email || '').trim().toLowerCase();
+
+    if (!cleanEmail) {
+      return null;
+    }
+
+    try {
+      const res = await executePgQuery(
+        'SELECT * FROM users WHERE LOWER(email) = $1 LIMIT 1',
+        [cleanEmail]
+      );
+
+      return res.rows[0] || null;
+
+    } catch (err) {
+      return memUsers.find(
+        u =>
+          (u.email || '').toLowerCase() === cleanEmail
+      ) || null;
+    }
+  },
+
+  async createUser(data) {
+    const {
+      name,
+      email,
+      password_hash,
+      role = 'customer',
+      is_admin = 0,
+      phone = '',
+      whatsapp_number = '',
+      has_whatsapp = true
+    } = data || {};
+
+    const cleanEmail =
+      (email || '').trim().toLowerCase();
+
+    try {
+      const res = await executePgQuery(`
+        INSERT INTO users (
+          name,
+          email,
+          password_hash,
+          role,
+          is_admin,
+          phone,
+          whatsapp_number,
+          has_whatsapp
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        RETURNING *
+      `, [
+        name,
+        cleanEmail,
+        password_hash,
+        role,
+        is_admin ? 1 : 0,
+        phone,
+        whatsapp_number,
+        has_whatsapp
+      ]);
+
+      const user = res.rows[0];
+
+      memUsers.push(user);
+
+      return user;
+
+    } catch (err) {
+      const existing = memUsers.find(
+        u =>
+          (u.email || '').toLowerCase() === cleanEmail
+      );
+
+      if (existing) {
+        throw new Error('Email already registered');
+      }
+
+      const user = {
+        id: memNextUserId++,
+        name,
+        email: cleanEmail,
+        password_hash,
+        role,
+        is_admin: is_admin ? 1 : 0,
+        phone,
+        whatsapp_number,
+        has_whatsapp,
+        created_at: new Date()
+      };
+
+      memUsers.push(user);
+
+      return user;
+    }
+  },
+        const p = memProducts.find(item => item.id === pId);
       if (p && (p.image || p.image_url)) {
         const raw = p.image_url || p.image;
         let formatted = '/phone-front.svg';
-        if (raw && (raw.startsWith('data:') || raw.startsWith('http') || raw.startsWith('/'))) {
+
+        if (
+          raw &&
+          (
+            raw.startsWith('data:') ||
+            raw.startsWith('http') ||
+            raw.startsWith('/')
+          )
+        ) {
           formatted = raw;
         } else if (raw) {
           formatted = `/uploads/${raw}`;
         }
-        return [{ id: 0, product_id: pId, image_path: formatted, image_url: formatted, is_main: 1 }];
+
+        return [{
+          id: 0,
+          product_id: pId,
+          image_path: formatted,
+          image_url: formatted,
+          is_main: 1
+        }];
       }
+
       return [];
     }
   },
@@ -806,39 +1548,112 @@ const db = {
   async getSimilarProducts(categoryId, currentId, limit = 4) {
     const cId = parseInt(categoryId, 10);
     const pId = parseInt(currentId, 10);
+
     try {
       const res = await executePgQuery(`
         SELECT p.*, c.name as category_name
         FROM products p 
         LEFT JOIN categories c ON p.category_id = c.id
-        WHERE p.category_id = $1 AND p.id != $2 AND (p.approved = 1 OR p.approved IS NULL OR p.approved = true)
-        ORDER BY p.id DESC LIMIT $3
+        WHERE p.category_id = $1
+          AND p.id != $2
+          AND (
+            p.approved = 1
+            OR p.approved IS NULL
+            OR p.approved = true
+          )
+        ORDER BY p.id DESC
+        LIMIT $3
       `, [cId, pId, limit]);
+
       return res.rows.map(formatProductRow);
+
     } catch (err) {
       return memProducts
-        .filter(p => p.category_id === cId && p.id !== pId && (p.approved === 1 || p.approved == null))
+        .filter(
+          p =>
+            p.category_id === cId &&
+            p.id !== pId &&
+            (p.approved === 1 || p.approved == null)
+        )
         .slice(0, limit)
         .map(formatProductRow);
     }
   },
 
-  async createProduct({ title, description, price, category_id, phone, whatsapp_number, location, payment_code, quantity, images, seller_id, condition = 'Brand New' }) {
-    const mainImageItem = (images && images.length > 0) ? images[0] : null;
-    const mainImageFile = mainImageItem ? (typeof mainImageItem === 'object' ? mainImageItem.filename : mainImageItem) : 'phone-front.svg';
-    const mainImageUrl = mainImageItem ? (typeof mainImageItem === 'object' ? (mainImageItem.dataUrl || mainImageItem.filename) : mainImageItem) : '/phone-front.svg';
-    const wa = sanitizeWhatsAppNumber(whatsapp_number || phone || '');
-    const parsedPrice = isNaN(parseFloat(price)) ? 0 : Math.max(0, parseFloat(price));
-    const parsedQty = isNaN(parseInt(quantity, 10)) ? 1 : Math.max(1, parseInt(quantity, 10));
-    let parsedCatId = parseInt(category_id, 10) || 1;
+  async createProduct({
+    title,
+    description,
+    price,
+    category_id,
+    phone,
+    whatsapp_number,
+    location,
+    payment_code,
+    quantity,
+    images,
+    seller_id,
+    condition = 'Brand New'
+  }) {
+    const mainImageItem =
+      (images && images.length > 0)
+        ? images[0]
+        : null;
 
-    let validSellerId = seller_id ? parseInt(seller_id, 10) : null;
+    const mainImageFile =
+      mainImageItem
+        ? (
+            typeof mainImageItem === 'object'
+              ? mainImageItem.filename
+              : mainImageItem
+          )
+        : 'phone-front.svg';
+
+    const mainImageUrl =
+      mainImageItem
+        ? (
+            typeof mainImageItem === 'object'
+              ? (
+                  mainImageItem.dataUrl ||
+                  mainImageItem.filename
+                )
+              : mainImageItem
+          )
+        : '/phone-front.svg';
+
+    const wa = sanitizeWhatsAppNumber(
+      whatsapp_number || phone || ''
+    );
+
+    const parsedPrice =
+      isNaN(parseFloat(price))
+        ? 0
+        : Math.max(0, parseFloat(price));
+
+    const parsedQty =
+      isNaN(parseInt(quantity, 10))
+        ? 1
+        : Math.max(1, parseInt(quantity, 10));
+
+    let parsedCatId =
+      parseInt(category_id, 10) || 1;
+
+    let validSellerId =
+      seller_id
+        ? parseInt(seller_id, 10)
+        : null;
 
     try {
       // 1. Sanitize category ID against PostgreSQL categories
-      const catRes = await executePgQuery('SELECT id FROM categories WHERE id = $1', [parsedCatId]);
+      const catRes = await executePgQuery(
+        'SELECT id FROM categories WHERE id = $1',
+        [parsedCatId]
+      );
+
       if (catRes.rows.length === 0) {
-        const firstCat = await executePgQuery('SELECT id FROM categories ORDER BY id ASC LIMIT 1');
+        const firstCat = await executePgQuery(
+          'SELECT id FROM categories ORDER BY id ASC LIMIT 1'
+        );
+
         if (firstCat.rows.length > 0) {
           parsedCatId = firstCat.rows[0].id;
         }
@@ -846,7 +1661,11 @@ const db = {
 
       // 2. Resolve seller_id to ensure proper linkage
       if (validSellerId) {
-        const userRes = await executePgQuery('SELECT id FROM users WHERE id = $1', [validSellerId]);
+        const userRes = await executePgQuery(
+          'SELECT id FROM users WHERE id = $1',
+          [validSellerId]
+        );
+
         if (userRes.rows.length === 0) {
           validSellerId = null;
         }
@@ -854,39 +1673,134 @@ const db = {
 
       // If seller_id is still not set, match user by phone
       if (!validSellerId && phone) {
-        const cleanP = phone.replace(/[^0-9]/g, '');
+        const cleanP =
+          phone.replace(/[^0-9]/g, '');
+
         if (cleanP.length >= 9) {
           const uRes = await executePgQuery(`
             SELECT id FROM users 
-            WHERE is_admin = 0 AND (
-              RIGHT(REGEXP_REPLACE(COALESCE(phone,''), '[^0-9]', '', 'g'), 9) = $1
-              OR RIGHT(REGEXP_REPLACE(COALESCE(whatsapp_number,''), '[^0-9]', '', 'g'), 9) = $1
-            )
+            WHERE is_admin = 0
+              AND (
+                RIGHT(
+                  REGEXP_REPLACE(
+                    COALESCE(phone,''),
+                    '[^0-9]',
+                    '',
+                    'g'
+                  ),
+                  9
+                ) = $1
+                OR RIGHT(
+                  REGEXP_REPLACE(
+                    COALESCE(whatsapp_number,''),
+                    '[^0-9]',
+                    '',
+                    'g'
+                  ),
+                  9
+                ) = $1
+              )
             LIMIT 1
           `, [cleanP.slice(-9)]);
+
           if (uRes.rows.length > 0) {
-            validSellerId = uRes.rows[0].id;
+            validSellerId =
+              uRes.rows[0].id;
           }
         }
       }
 
       const res = await executePgQuery(`
-        INSERT INTO products (title, description, price, category_id, phone, seller_phone, whatsapp_number, location, condition, image, image_url, payment_code, quantity, approved, seller_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1, $14)
+        INSERT INTO products (
+          title,
+          description,
+          price,
+          category_id,
+          phone,
+          seller_phone,
+          whatsapp_number,
+          location,
+          condition,
+          image,
+          image_url,
+          payment_code,
+          quantity,
+          approved,
+          seller_id
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $10,
+          $11,
+          $12,
+          $13,
+          1,
+          $14
+        )
         RETURNING id
-      `, [title, description, parsedPrice, parsedCatId, phone, phone, wa, location || 'Kampala, Uganda', condition, mainImageFile, mainImageUrl, payment_code, parsedQty, validSellerId]);
-      
-      const newProdId = res.rows[0].id;
+      `, [
+        title,
+        description,
+        parsedPrice,
+        parsedCatId,
+        phone,
+        phone,
+        wa,
+        location || 'Kampala, Uganda',
+        condition,
+        mainImageFile,
+        mainImageUrl,
+        payment_code,
+        parsedQty,
+        validSellerId
+      ]);
+
+      const newProdId =
+        res.rows[0].id;
 
       if (images && images.length > 0) {
-        for (let i = 0; i < images.length; i++) {
+        for (
+          let i = 0;
+          i < images.length;
+          i++
+        ) {
           const item = images[i];
-          const fn = typeof item === 'object' ? item.filename : item;
-          const dUrl = typeof item === 'object' ? (item.dataUrl || item.filename) : item;
+
+          const fn =
+            typeof item === 'object'
+              ? item.filename
+              : item;
+
+          const dUrl =
+            typeof item === 'object'
+              ? (
+                  item.dataUrl ||
+                  item.filename
+                )
+              : item;
+
           await executePgQuery(`
-            INSERT INTO product_images (product_id, image_path, image_url, is_main)
+            INSERT INTO product_images (
+              product_id,
+              image_path,
+              image_url,
+              is_main
+            )
             VALUES ($1, $2, $3, $4)
-          `, [newProdId, fn, dUrl, i === 0]);
+          `, [
+            newProdId,
+            fn,
+            dUrl,
+            i === 0
+          ]);
         }
       }
 
@@ -913,9 +1827,16 @@ const db = {
       });
 
       return newProdId;
+
     } catch (err) {
-      console.error('Failed to create product in PostgreSQL, using in-memory store:', err.message);
-      const newProdId = memNextProdId++;
+      console.error(
+        'Failed to create product in PostgreSQL, using in-memory store:',
+        err.message
+      );
+
+      const newProdId =
+        memNextProdId++;
+
       memProducts.unshift({
         id: newProdId,
         title,
@@ -939,8 +1860,19 @@ const db = {
 
       if (images && images.length > 0) {
         images.forEach((item, index) => {
-          const fn = typeof item === 'object' ? item.filename : item;
-          const dUrl = typeof item === 'object' ? (item.dataUrl || item.filename) : item;
+          const fn =
+            typeof item === 'object'
+              ? item.filename
+              : item;
+
+          const dUrl =
+            typeof item === 'object'
+              ? (
+                  item.dataUrl ||
+                  item.filename
+                )
+              : item;
+
           memProductImages.push({
             id: memNextImgId++,
             product_id: newProdId,
@@ -950,402 +1882,353 @@ const db = {
           });
         });
       }
+
       return newProdId;
     }
   },
 
   async getAvailableProducts() {
-    return this.getProducts(p => p.quantity > 0 && (p.approved === 1 || p.approved === true));
+    return this.getProducts(
+      p =>
+        p.quantity > 0 &&
+        (
+          p.approved === 1 ||
+          p.approved === true
+        )
+    );
   },
 
   async getSoldProducts() {
-    return this.getProducts(p => p.quantity <= 0);
+    return this.getProducts(
+      p => p.quantity <= 0
+    );
   },
 
   async getProductsBySeller(sellerId) {
-    const sId = parseInt(sellerId, 10);
+    const sId =
+      parseInt(sellerId, 10);
+
     if (!sId) return [];
 
     let sellerUser = null;
+
     try {
-      sellerUser = await this.findUserById(sId);
+      sellerUser =
+        await this.findUserById(sId);
     } catch {}
 
-    const cleanUserPhone = sellerUser && sellerUser.phone ? sellerUser.phone.replace(/[^0-9]/g, '') : '';
-    const cleanUserWa = sellerUser && sellerUser.whatsapp_number ? sellerUser.whatsapp_number.replace(/[^0-9]/g, '') : '';
+    const cleanUserPhone =
+      sellerUser &&
+      sellerUser.phone
+        ? sellerUser.phone.replace(
+            /[^0-9]/g,
+            ''
+          )
+        : '';
+
+    const cleanUserWa =
+      sellerUser &&
+      sellerUser.whatsapp_number
+        ? sellerUser.whatsapp_number.replace(
+            /[^0-9]/g,
+            ''
+          )
+        : '';
 
     return this.getProducts(p => {
+
       // 1. Direct seller_id match
-      if (p.seller_id && parseInt(p.seller_id, 10) === sId) return true;
+      if (
+        p.seller_id &&
+        parseInt(p.seller_id, 10) === sId
+      ) {
+        return true;
+      }
+
       // 2. Phone match against registered seller phone
-      if (cleanUserPhone && cleanUserPhone.length >= 9) {
-        const pPhone = (p.phone || p.seller_phone || '').replace(/[^0-9]/g, '');
-        if (pPhone && (pPhone.endsWith(cleanUserPhone.slice(-9)) || cleanUserPhone.endsWith(pPhone.slice(-9)))) {
+      if (
+        cleanUserPhone &&
+        cleanUserPhone.length >= 9
+      ) {
+        const pPhone =
+          (
+            p.phone ||
+            p.seller_phone ||
+            ''
+          ).replace(
+            /[^0-9]/g,
+            ''
+          );
+
+        if (
+          pPhone &&
+          (
+            pPhone.endsWith(
+              cleanUserPhone.slice(-9)
+            ) ||
+            cleanUserPhone.endsWith(
+              pPhone.slice(-9)
+            )
+          )
+        ) {
           return true;
         }
       }
+
       // 3. WhatsApp number match
-      if (cleanUserWa && cleanUserWa.length >= 9 && cleanUserWa !== '256763480495') {
-        const pWa = (p.whatsapp_number || '').replace(/[^0-9]/g, '');
-        if (pWa && (pWa.endsWith(cleanUserWa.slice(-9)) || cleanUserWa.endsWith(pWa.slice(-9)))) {
+      if (
+        cleanUserWa &&
+        cleanUserWa.length >= 9 &&
+        cleanUserWa !== '256763480495'
+      ) {
+        const pWa =
+          (
+            p.whatsapp_number ||
+            ''
+          ).replace(
+            /[^0-9]/g,
+            ''
+          );
+
+        if (
+          pWa &&
+          (
+            pWa.endsWith(
+              cleanUserWa.slice(-9)
+            ) ||
+            cleanUserWa.endsWith(
+              pWa.slice(-9)
+            )
+          )
+        ) {
           return true;
         }
       }
+
       return false;
     });
   },
 
-  async quickUpdateProduct(productId, { title, price, quantity, approved }) {
-    if (isConnectedToPostgres && pool) {
+  async quickUpdateProduct(
+    productId,
+    {
+      title,
+      price,
+      quantity,
+      approved
+    }
+  ) {
+    if (
+      isConnectedToPostgres &&
+      pool
+    ) {
       await pool.query(`
         UPDATE products 
-        SET title = COALESCE($1, title),
-            price = COALESCE($2, price),
-            quantity = COALESCE($3, quantity),
-            approved = COALESCE($4, approved)
+        SET
+          title = COALESCE($1, title),
+          price = COALESCE($2, price),
+          quantity = COALESCE($3, quantity),
+          approved = COALESCE($4, approved)
         WHERE id = $5
-      `, [title || null, price || null, quantity !== undefined ? quantity : null, approved !== undefined ? approved : null, productId]);
+      `, [
+        title || null,
+        price || null,
+        quantity !== undefined
+          ? quantity
+          : null,
+        approved !== undefined
+          ? approved
+          : null,
+        productId
+      ]);
+
       return;
     }
 
-    const prod = memProducts.find(p => p.id === productId);
+    const prod =
+      memProducts.find(
+        p => p.id === productId
+      );
+
     if (prod) {
-      if (title !== undefined) prod.title = title;
-      if (price !== undefined) prod.price = parseFloat(price);
-      if (quantity !== undefined) prod.quantity = Math.max(0, parseInt(quantity, 10));
-      if (approved !== undefined) prod.approved = parseInt(approved, 10);
-      if (prod.quantity === 0) prod.approved = 0;
+      if (title !== undefined) {
+        prod.title = title;
+      }
+
+      if (price !== undefined) {
+        prod.price =
+          parseFloat(price);
+      }
+
+      if (quantity !== undefined) {
+        prod.quantity =
+          Math.max(
+            0,
+            parseInt(quantity, 10)
+          );
+      }
+
+      if (approved !== undefined) {
+        prod.approved =
+          parseInt(approved, 10);
+      }
+
+      if (prod.quantity === 0) {
+        prod.approved = 0;
+      }
     }
   },
 
-  // Seller Price Update (Only publisher/seller can change their own product's price)
-  async updateProductPriceBySeller(productId, sellerId, newPrice, newQuantity = null) {
-    const pId = parseInt(productId, 10);
-    const sId = parseInt(sellerId, 10);
-    const parsedPrice = parseFloat(newPrice);
+  // Seller Price Update
+  // Only publisher/seller can change
+  // their own product's price
+  async updateProductPriceBySeller(
+    productId,
+    sellerId,
+    newPrice,
+    newQuantity = null
+  ) {
+    const pId =
+      parseInt(productId, 10);
 
-    if (isNaN(parsedPrice) || parsedPrice <= 0) {
-      return { success: false, error: 'Price must be a valid positive number.' };
+    const sId =
+      parseInt(sellerId, 10);
+
+    const parsedPrice =
+      parseFloat(newPrice);
+
+    if (
+      isNaN(parsedPrice) ||
+      parsedPrice <= 0
+    ) {
+      return {
+        success: false,
+        error:
+          'Price must be a valid positive number.'
+      };
     }
 
-    const prod = await this.getProductById(pId);
+    const prod =
+      await this.getProductById(pId);
+
     if (!prod) {
-      return { success: false, error: 'Product not found.' };
+      return {
+        success: false,
+        error:
+          'Product not found.'
+      };
     }
 
-    // Security check: Must be the owner/seller who published it
-    if (prod.seller_id && prod.seller_id !== sId) {
-      return { success: false, error: 'Permission Denied: You can only edit prices of products that you published.' };
+    // Security check:
+    // Must be the owner/seller who published it
+    if (
+      prod.seller_id &&
+      prod.seller_id !== sId
+    ) {
+      return {
+        success: false,
+        error:
+          'Permission Denied: You can only edit prices of products that you published.'
+      };
     }
 
-    if (isConnectedToPostgres && pool) {
-      let q = 'UPDATE products SET price = $1';
-      const params = [parsedPrice];
-      if (newQuantity !== null && !isNaN(parseInt(newQuantity, 10))) {
-        params.push(Math.max(0, parseInt(newQuantity, 10)));
+    if (
+      isConnectedToPostgres &&
+      pool
+    ) {
+      let q =
+        'UPDATE products SET price = $1';
+
+      const params = [
+        parsedPrice
+      ];
+
+      if (
+        newQuantity !== null &&
+        !isNaN(
+          parseInt(
+            newQuantity,
+            10
+          )
+        )
+      ) {
+        params.push(
+          Math.max(
+            0,
+            parseInt(
+              newQuantity,
+              10
+            )
+          )
+        );
+
         q += `, quantity = $${params.length}`;
       }
+
       params.push(pId);
+
       q += ` WHERE id = $${params.length}`;
-      await pool.query(q, params);
+
+      await pool.query(
+        q,
+        params
+      );
+
     } else {
-      const mProd = memProducts.find(p => p.id === pId);
+      const mProd =
+        memProducts.find(
+          p => p.id === pId
+        );
+
       if (mProd) {
-        mProd.price = parsedPrice;
-        if (newQuantity !== null && !isNaN(parseInt(newQuantity, 10))) {
-          mProd.quantity = Math.max(0, parseInt(newQuantity, 10));
+        mProd.price =
+          parsedPrice;
+
+        if (
+          newQuantity !== null &&
+          !isNaN(
+            parseInt(
+              newQuantity,
+              10
+            )
+          )
+        ) {
+          mProd.quantity =
+            Math.max(
+              0,
+              parseInt(
+                newQuantity,
+                10
+              )
+            );
         }
       }
     }
-
-    // Auto-resolve any pending price change requests for this product
-    await this.cancelPendingPriceRequestsForProduct(pId, 'Seller updated price directly');
-
-    return { success: true, newPrice: parsedPrice };
-  },
-
-  // Admin Product Update with Seller Price Protection:
-  // Admin CANNOT change price without owner accepting, so if price changed and product belongs to another seller, create a proposal!
-  async adminUpdateProductOrProposePrice(productId, adminUserId, { title, price, quantity, approved, reason = '' }) {
-    const pId = parseInt(productId, 10);
-    const prod = await this.getProductById(pId);
-    if (!prod) {
-      return { success: false, error: 'Product not found.' };
-    }
-
-    const parsedPrice = price !== undefined ? parseFloat(price) : prod.price;
-    const parsedQty = quantity !== undefined ? Math.max(0, parseInt(quantity, 10)) : prod.quantity;
-    const parsedApproved = approved !== undefined ? parseInt(approved, 10) : prod.approved;
-
-    let priceProposalCreated = false;
-    let priceProposalId = null;
-
-    // Check if price is being changed on a product published by someone else
-    const isPriceChanged = !isNaN(parsedPrice) && Math.round(parsedPrice) !== Math.round(prod.price);
-    const isOwnedByDifferentSeller = prod.seller_id && prod.seller_id !== adminUserId && prod.seller_id !== 1;
-
-    if (isPriceChanged && isOwnedByDifferentSeller) {
-      // Create price change request for the seller to review & accept
-      const reqRes = await this.createPriceChangeRequest({
-        productId: pId,
-        sellerId: prod.seller_id,
-        requestedBy: adminUserId || 1,
-        currentPrice: prod.price,
-        proposedPrice: parsedPrice,
-        reason: reason || 'Market price alignment recommended by Admin'
-      });
-      priceProposalCreated = true;
-      priceProposalId = reqRes.id;
-
-      // Update non-price fields directly
-      await this.quickUpdateProduct(pId, {
-        title: title || prod.title,
-        price: prod.price, // Keep original price until seller accepts
-        quantity: parsedQty,
-        approved: parsedApproved
-      });
-
-      return {
-        success: true,
-        priceProposalCreated: true,
-        proposedPrice: parsedPrice,
-        currentPrice: prod.price,
-        message: `Price proposal of UGX ${Number(parsedPrice).toLocaleString()} submitted to Seller #${prod.seller_id}. Per marketplace policy, the product owner must accept before the price updates.`
-      };
-    } else {
-      // Admin published it or price wasn't changed: direct update
-      await this.quickUpdateProduct(pId, {
-        title: title || prod.title,
-        price: parsedPrice,
-        quantity: parsedQty,
-        approved: parsedApproved
-      });
-
-      return {
-        success: true,
-        priceProposalCreated: false,
-        message: 'Product details updated successfully.'
-      };
-    }
-  },
-
-  // Price Change Proposal Engine
-  async createPriceChangeRequest({ productId, sellerId, requestedBy, currentPrice, proposedPrice, reason }) {
-    const prod = await this.getProductById(productId);
-    const prodTitle = prod ? prod.title : `Product #${productId}`;
-
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query(`
-        INSERT INTO price_change_requests (product_id, seller_id, requested_by, current_price, proposed_price, reason, status)
-        VALUES ($1, $2, $3, $4, $5, $6, 'Pending')
-        RETURNING *
-      `, [productId, sellerId, requestedBy, currentPrice, proposedPrice, reason]);
-      
-      const reqObj = res.rows[0];
-
-      // Notify the product owner
-      await this.createNotification({
-        userId: sellerId,
-        title: '🏷️ Price Change Proposal from Admin',
-        message: `Admin proposed changing the price of your product "${prodTitle}" from UGX ${Number(currentPrice).toLocaleString()} to UGX ${Number(proposedPrice).toLocaleString()}. Reason: ${reason || 'Market alignment'}. Please review and Accept or Decline in My Listings.`,
-        type: 'price_proposal'
-      });
-
-      return reqObj;
-    }
-
-    const newReq = {
-      id: memNextPriceRequestId++,
-      product_id: productId,
-      seller_id: sellerId,
-      requested_by: requestedBy,
-      current_price: currentPrice,
-      proposed_price: proposedPrice,
-      reason: reason || 'Market alignment',
-      status: 'Pending',
-      created_at: new Date(),
-      resolved_at: null
-    };
-    memPriceChangeRequests.unshift(newReq);
-
-    // Notify seller
-    await this.createNotification({
-      userId: sellerId,
-      title: '🏷️ Price Change Proposal from Admin',
-      message: `Admin proposed changing the price of your product "${prodTitle}" from UGX ${Number(currentPrice).toLocaleString()} to UGX ${Number(proposedPrice).toLocaleString()}. Reason: ${reason || 'Market alignment'}. Please review and Accept or Decline in My Listings.`,
-      type: 'price_proposal'
-    });
-
-    return newReq;
-  },
-
-  async getPendingPriceChangeRequestsForSeller(sellerId) {
-    const sId = parseInt(sellerId, 10);
-    if (!sId) return [];
-
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query(`
-        SELECT pcr.*, p.title as product_title, p.image as product_image, p.price as current_live_price, p.quantity as product_quantity
-        FROM price_change_requests pcr
-        LEFT JOIN products p ON pcr.product_id = p.id
-        WHERE pcr.seller_id = $1 AND pcr.status = 'Pending'
-        ORDER BY pcr.id DESC
-      `, [sId]);
-      return res.rows.map(r => ({
-        ...r,
-        current_price: parseFloat(r.current_price),
-        proposed_price: parseFloat(r.proposed_price)
-      }));
-    }
-
-    return memPriceChangeRequests
-      .filter(r => r.seller_id === sId && r.status === 'Pending')
-      .map(r => {
-        const p = memProducts.find(prod => prod.id === r.product_id);
-        return {
-          ...r,
-          product_title: p ? p.title : `Product #${r.product_id}`,
-          product_image: p ? p.image : 'phone-front.svg',
-          current_live_price: p ? p.price : r.current_price,
-          product_quantity: p ? p.quantity : 1
-        };
-      });
-  },
-
-  async getPendingPriceChangeRequestsForProduct(productId) {
-    const pId = parseInt(productId, 10);
-    if (!pId) return null;
-
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query(`
-        SELECT * FROM price_change_requests WHERE product_id = $1 AND status = 'Pending' ORDER BY id DESC LIMIT 1
-      `, [pId]);
-      return res.rows[0] || null;
-    }
-
-    return memPriceChangeRequests.find(r => r.product_id === pId && r.status === 'Pending') || null;
-  },
-
-  async getAllPriceChangeRequests() {
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query(`
-        SELECT pcr.*, p.title as product_title, p.image as product_image, u.name as seller_name, u.email as seller_email, u.phone as seller_phone
-        FROM price_change_requests pcr
-        LEFT JOIN products p ON pcr.product_id = p.id
-        LEFT JOIN users u ON pcr.seller_id = u.id
-        ORDER BY pcr.id DESC
-      `);
-      return res.rows.map(r => ({
-        ...r,
-        current_price: parseFloat(r.current_price),
-        proposed_price: parseFloat(r.proposed_price)
-      }));
-    }
-
-    return memPriceChangeRequests.map(r => {
-      const p = memProducts.find(prod => prod.id === r.product_id);
-      const u = memUsers.find(user => user.id === r.seller_id);
-      return {
-        ...r,
-        product_title: p ? p.title : `Product #${r.product_id}`,
-        product_image: p ? p.image : 'phone-front.svg',
-        seller_name: u ? u.name : 'Seller #' + r.seller_id,
-        seller_email: u ? u.email : '',
-        seller_phone: u ? u.phone : ''
-      };
-    });
-  },
-
-  async resolvePriceChangeRequest(requestId, decision, sellerUserId) {
-    const reqId = parseInt(requestId, 10);
-    const sId = parseInt(sellerUserId, 10);
-    const validDecision = decision === 'Accepted' ? 'Accepted' : 'Rejected';
-
-    let request = null;
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query('SELECT * FROM price_change_requests WHERE id = $1', [reqId]);
-      request = res.rows[0] || null;
-    } else {
-      request = memPriceChangeRequests.find(r => r.id === reqId) || null;
-    }
-
-    if (!request) {
-      return { success: false, error: 'Price proposal request not found.' };
-    }
-
-    if (request.status !== 'Pending') {
-      return { success: false, error: `This price request has already been ${request.status.toLowerCase()}.` };
-    }
-
-    // Security check: Only product owner / seller can accept or reject
-    if (request.seller_id && request.seller_id !== sId) {
-      return { success: false, error: 'Access Denied: Only the owner of this product can accept or decline price changes.' };
-    }
-
-    const prod = await this.getProductById(request.product_id);
-    const prodTitle = prod ? prod.title : `Product #${request.product_id}`;
-    const newPrice = parseFloat(request.proposed_price);
-
-    if (validDecision === 'Accepted') {
-      // 1. Update live product price
-      if (isConnectedToPostgres && pool) {
-        await pool.query('UPDATE products SET price = $1 WHERE id = $2', [newPrice, request.product_id]);
-        await pool.query('UPDATE price_change_requests SET status = $1, resolved_at = NOW() WHERE id = $2', ['Accepted', reqId]);
-      } else {
-        if (prod) prod.price = newPrice;
-        const mProd = memProducts.find(p => p.id === request.product_id);
-        if (mProd) mProd.price = newPrice;
-        request.status = 'Accepted';
-        request.resolved_at = new Date();
-      }
-
-      // 2. Notifications
-      await this.createNotification({
-        userId: sId,
-        title: '✅ Price Adjustment Confirmed',
-        message: `You accepted the proposed price for "${prodTitle}". The live marketplace price is now UGX ${Number(newPrice).toLocaleString()}.`,
-        type: 'price_update'
-      });
-
-      // Notify Admin
-      const adminUsers = await this.getAdminUsers();
-      for (const admin of adminUsers) {
-        await this.createNotification({
-          userId: admin.id,
-          title: '🎉 Seller Accepted Price Change',
-          message: `Seller has accepted the price proposal for "${prodTitle}". Live price updated to UGX ${Number(newPrice).toLocaleString()}.`,
-          type: 'price_approved'
-        });
-      }
-
-      return {
-        success: true,
-        decision: 'Accepted',
-        newPrice,
-        message: `Price successfully updated to UGX ${Number(newPrice).toLocaleString()}!`
-      };
-    } else {
-      // Rejected
-      if (isConnectedToPostgres && pool) {
-        await pool.query('UPDATE price_change_requests SET status = $1, resolved_at = NOW() WHERE id = $2', ['Rejected', reqId]);
+  },        await pool.query(
+          'UPDATE price_change_requests SET status = $1, resolved_at = NOW() WHERE id = $2',
+          ['Rejected', reqId]
+        );
       } else {
         request.status = 'Rejected';
         request.resolved_at = new Date();
       }
 
+      // Notify seller
       await this.createNotification({
         userId: sId,
-        title: '❌ Price Proposal Declined',
-        message: `You declined the proposed price for "${prodTitle}". The price remains UGX ${Number(request.current_price).toLocaleString()}.`,
+        title: '❌ Price Adjustment Declined',
+        message: `You declined the proposed price change for "${prodTitle}". The product price remains at UGX ${Number(request.current_price).toLocaleString()}.`,
         type: 'price_rejected'
       });
 
+      // Notify Admin
       const adminUsers = await this.getAdminUsers();
+
       for (const admin of adminUsers) {
         await this.createNotification({
           userId: admin.id,
-          title: '⚠️ Seller Declined Price Proposal',
-          message: `Seller declined the price proposal of UGX ${Number(request.proposed_price).toLocaleString()} for "${prodTitle}". Price remains UGX ${Number(request.current_price).toLocaleString()}.`,
+          title: '⚠️ Seller Declined Price Change',
+          message: `Seller has declined the proposed price change for "${prodTitle}". The live price remains UGX ${Number(request.current_price).toLocaleString()}.`,
           type: 'price_rejected'
         });
       }
@@ -1353,550 +2236,504 @@ const db = {
       return {
         success: true,
         decision: 'Rejected',
-        message: 'Price proposal was declined. Product price remains unchanged.'
+        message: 'Price proposal declined. The original price remains unchanged.'
       };
     }
   },
 
-  async cancelPendingPriceRequestsForProduct(productId, reason = 'Cancelled') {
+  async cancelPendingPriceRequestsForProduct(productId, reason = '') {
+    const pId = parseInt(productId, 10);
+
+    if (!pId) {
+      return false;
+    }
+
     if (isConnectedToPostgres && pool) {
-      await pool.query("UPDATE price_change_requests SET status = 'Cancelled', resolved_at = NOW() WHERE product_id = $1 AND status = 'Pending'", [productId]);
-    } else {
-      memPriceChangeRequests.forEach(r => {
-        if (r.product_id === productId && r.status === 'Pending') {
-          r.status = 'Cancelled';
-          r.resolved_at = new Date();
+      try {
+        await pool.query(`
+          UPDATE price_change_requests
+          SET
+            status = 'Cancelled',
+            resolved_at = NOW()
+          WHERE product_id = $1
+            AND status = 'Pending'
+        `, [pId]);
+
+        return true;
+      } catch (err) {
+        console.warn(
+          'Could not cancel pending price requests:',
+          err.message
+        );
+
+        return false;
+      }
+    }
+
+    let changed = false;
+
+    memPriceChangeRequests.forEach(req => {
+      if (
+        req.product_id === pId &&
+        req.status === 'Pending'
+      ) {
+        req.status = 'Cancelled';
+        req.resolved_at = new Date();
+        req.cancel_reason = reason;
+        changed = true;
+      }
+    });
+
+    return changed;
+  },
+
+  async findUserById(id) {
+    return this.getUserById(id);
+  },
+
+  async findUserByEmail(email) {
+    return this.getUserByEmail(email);
+  },
+
+  async authenticateUser(email, password) {
+    const user =
+      await this.getUserByEmail(email);
+
+    if (!user) {
+      return null;
+    }
+
+    const valid =
+      await bcrypt.compare(
+        password,
+        user.password_hash
+      );
+
+    if (!valid) {
+      return null;
+    }
+
+    return user;
+  },
+
+  async updateUser(id, data) {
+    const userId =
+      parseInt(id, 10);
+
+    if (!userId) {
+      return null;
+    }
+
+    const existing =
+      await this.getUserById(userId);
+
+    if (!existing) {
+      return null;
+    }
+
+    const updated = {
+      ...existing,
+      ...data,
+      id: userId
+    };
+
+    try {
+      const res =
+        await executePgQuery(`
+          UPDATE users
+          SET
+            name = $1,
+            email = $2,
+            role = $3,
+            is_admin = $4,
+            phone = $5,
+            whatsapp_number = $6,
+            has_whatsapp = $7
+          WHERE id = $8
+          RETURNING *
+        `, [
+          updated.name,
+          updated.email,
+          updated.role || 'customer',
+          updated.is_admin ? 1 : 0,
+          updated.phone || '',
+          updated.whatsapp_number || '',
+          updated.has_whatsapp !== false,
+          userId
+        ]);
+
+      if (res.rows.length > 0) {
+        const result =
+          res.rows[0];
+
+        const index =
+          memUsers.findIndex(
+            u => u.id === userId
+          );
+
+        if (index >= 0) {
+          memUsers[index] = result;
         }
-      });
+
+        return result;
+      }
+
+    } catch (err) {
+      console.warn(
+        'Database user update failed:',
+        err.message
+      );
+    }
+
+    const index =
+      memUsers.findIndex(
+        u => u.id === userId
+      );
+
+    if (index >= 0) {
+      memUsers[index] = updated;
+    } else {
+      memUsers.push(updated);
+    }
+
+    return updated;
+  },
+
+  async updateUserPassword(id, newPassword) {
+    const userId =
+      parseInt(id, 10);
+
+    if (!userId || !newPassword) {
+      return false;
+    }
+
+    const passwordHash =
+      await bcrypt.hash(
+        newPassword,
+        10
+      );
+
+    try {
+      await executePgQuery(
+        'UPDATE users SET password_hash = $1 WHERE id = $2',
+        [passwordHash, userId]
+      );
+
+      const user =
+        memUsers.find(
+          u => u.id === userId
+        );
+
+      if (user) {
+        user.password_hash =
+          passwordHash;
+      }
+
+      return true;
+
+    } catch (err) {
+      const user =
+        memUsers.find(
+          u => u.id === userId
+        );
+
+      if (user) {
+        user.password_hash =
+          passwordHash;
+
+        return true;
+      }
+
+      return false;
+    }
+  },
+
+  async deleteUser(id) {
+    const userId =
+      parseInt(id, 10);
+
+    if (!userId) {
+      return false;
+    }
+
+    // Never delete the primary admin account
+    if (userId === 1) {
+      return false;
+    }
+
+    try {
+      await executePgQuery(
+        'DELETE FROM users WHERE id = $1',
+        [userId]
+      );
+
+      memUsers =
+        memUsers.filter(
+          u => u.id !== userId
+        );
+
+      return true;
+
+    } catch (err) {
+      const before =
+        memUsers.length;
+
+      memUsers =
+        memUsers.filter(
+          u => u.id !== userId
+        );
+
+      return (
+        memUsers.length <
+        before
+      );
     }
   },
 
   async getAdminUsers() {
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query("SELECT * FROM users WHERE is_admin = 1 OR role = 'admin' OR LOWER(email) = $1", [ADMIN_USERNAME.toLowerCase()]);
-      return res.rows;
-    }
-    return memUsers.filter(u => u.is_admin === 1 || u.role === 'admin' || u.email.toLowerCase() === ADMIN_USERNAME.toLowerCase());
-  },
-
-  async updateProductQuantity(productId, quantity) {
-    const approved = quantity > 0 ? 1 : 0;
-    if (isConnectedToPostgres && pool) {
-      await pool.query(
-        'UPDATE products SET quantity = $1, approved = $2 WHERE id = $3',
-        [quantity, approved, productId]
-      );
-      return;
-    }
-    const prod = memProducts.find(p => p.id === productId);
-    if (prod) {
-      prod.quantity = Math.max(0, quantity);
-      prod.approved = approved;
-    }
-  },
-
-  async deleteProduct(productId) {
-    const pId = parseInt(productId, 10);
-    if (!pId) return;
-
-    if (isConnectedToPostgres && pool) {
-      try {
-        await pool.query('DELETE FROM price_change_requests WHERE product_id = $1', [pId]);
-      } catch {}
-      await pool.query('DELETE FROM product_images WHERE product_id = $1', [pId]);
-      await pool.query('DELETE FROM products WHERE id = $1', [pId]);
-      return;
-    }
-    memPriceChangeRequests = memPriceChangeRequests.filter(r => r.product_id !== pId);
-    memProducts = memProducts.filter(p => p.id !== pId);
-    memProductImages = memProductImages.filter(img => img.product_id !== pId);
-  },
-
-  async clearAllProducts() {
-    if (isConnectedToPostgres && pool) {
-      try {
-        await pool.query('DELETE FROM price_change_requests');
-      } catch {}
-      try {
-        await pool.query('DELETE FROM product_images');
-      } catch {}
-      try {
-        await pool.query('DELETE FROM products');
-      } catch {}
-      return;
-    }
-    memPriceChangeRequests = [];
-    memProducts = [];
-    memProductImages = [];
-  },
-
-  async getImageDataByFilename(filename) {
-    if (!filename) return null;
-    const cleanFn = filename.replace('/uploads/', '').replace('uploads/', '');
     try {
-      const imgRes = await executePgQuery('SELECT image_url FROM product_images WHERE image_path = $1 OR image_url LIKE $2 LIMIT 1', [cleanFn, `%${cleanFn}%`]);
-      if (imgRes.rows.length > 0 && imgRes.rows[0].image_url && imgRes.rows[0].image_url.startsWith('data:')) {
-        return imgRes.rows[0].image_url;
+      const res =
+        await executePgQuery(`
+          SELECT *
+          FROM users
+          WHERE is_admin = 1
+             OR role = 'admin'
+          ORDER BY id ASC
+        `);
+
+      if (res.rows.length > 0) {
+        return res.rows;
       }
-      const prodRes = await executePgQuery('SELECT image_url FROM products WHERE image = $1 OR image_url LIKE $2 LIMIT 1', [cleanFn, `%${cleanFn}%`]);
-      if (prodRes.rows.length > 0 && prodRes.rows[0].image_url && prodRes.rows[0].image_url.startsWith('data:')) {
-        return prodRes.rows[0].image_url;
-      }
+
+      return memUsers.filter(
+        u =>
+          u.is_admin === 1 ||
+          u.role === 'admin'
+      );
+
     } catch (err) {
-      console.warn('Error fetching image from DB:', err.message);
-    }
-    const memImg = memProductImages.find(i => i.image_path === cleanFn || (i.image_url && i.image_url.includes(cleanFn)));
-    if (memImg && memImg.image_url && memImg.image_url.startsWith('data:')) return memImg.image_url;
-    const memP = memProducts.find(p => p.image === cleanFn || (p.image_url && p.image_url.includes(cleanFn)));
-    if (memP && memP.image_url && memP.image_url.startsWith('data:')) return memP.image_url;
-    return null;
-  },
-
-  async findUserByEmailOrUsername(emailOrUsername) {
-    const queryStr = (emailOrUsername || '').trim().toLowerCase();
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query('SELECT * FROM users WHERE LOWER(email) = $1', [queryStr]);
-      if (res.rows.length === 0) return null;
-      const u = res.rows[0];
-      return {
-        ...u,
-        is_admin: (u.is_admin === 1 || u.role === 'admin' || u.email.toLowerCase() === ADMIN_USERNAME.toLowerCase()) ? 1 : 0
-      };
-    }
-    const u = memUsers.find(usr => usr.email.toLowerCase() === queryStr);
-    if (!u) return null;
-    return {
-      ...u,
-      is_admin: (u.is_admin === 1 || u.role === 'admin' || u.email.toLowerCase() === ADMIN_USERNAME.toLowerCase()) ? 1 : 0
-    };
-  },
-
-  async findUserById(id) {
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
-      if (res.rows.length === 0) return null;
-      const u = res.rows[0];
-      return {
-        ...u,
-        is_admin: (u.is_admin === 1 || u.role === 'admin' || u.email.toLowerCase() === ADMIN_USERNAME.toLowerCase()) ? 1 : 0
-      };
-    }
-    const u = memUsers.find(usr => usr.id === id);
-    if (!u) return null;
-    return {
-      ...u,
-      is_admin: (u.is_admin === 1 || u.role === 'admin' || u.email.toLowerCase() === ADMIN_USERNAME.toLowerCase()) ? 1 : 0
-    };
-  },
-
-  async createUser(name, email, passwordHash, isAdmin = 0, phone = '', whatsappNumber = '') {
-    const wa = sanitizeWhatsAppNumber(whatsappNumber || phone);
-    const hasWa = !!wa;
-    const roleStr = isAdmin ? 'admin' : 'customer';
-
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query(
-        'INSERT INTO users (name, email, password_hash, role, is_admin, phone, whatsapp_number, has_whatsapp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-        [name, email.toLowerCase(), passwordHash, roleStr, isAdmin, phone, wa, hasWa]
+      return memUsers.filter(
+        u =>
+          u.is_admin === 1 ||
+          u.role === 'admin'
       );
-      const user = res.rows[0];
-      user.is_admin = isAdmin;
-      // Create initial welcome & 10-sentence anti-deception policy notification
-      await this.createNotification({
-        userId: user.id,
-        title: '🛡️ Mandatory Anti-Deception & Authenticity Policy',
-        message: REGISTRATION_INTEGRITY_MESSAGE,
-        type: 'integrity_warning'
-      });
-      return user;
     }
-
-    const newUser = {
-      id: memNextUserId++,
-      name,
-      email: email.toLowerCase(),
-      password_hash: passwordHash,
-      role: roleStr,
-      is_admin: isAdmin,
-      phone,
-      whatsapp_number: wa,
-      has_whatsapp: hasWa,
-      created_at: new Date()
-    };
-    memUsers.push(newUser);
-
-    // Initial welcome & 10-sentence anti-deception policy notification
-    this.createNotification({
-      userId: newUser.id,
-      title: '🛡️ Mandatory Anti-Deception & Authenticity Policy',
-      message: REGISTRATION_INTEGRITY_MESSAGE,
-      type: 'integrity_warning'
-    });
-
-    return newUser;
   },
 
-  async syncDatabase() {
-    await initDatabase();
-    if (!isConnectedToPostgres || !pool) {
-      return {
-        success: false,
-        isConnected: false,
-        message: 'Supabase PostgreSQL connection is inactive or DATABASE_URL is not set in environment settings.'
-      };
+  async getSellerUsers() {
+    try {
+      const res =
+        await executePgQuery(`
+          SELECT *
+          FROM users
+          WHERE is_admin = 0
+            AND (
+              role = 'seller'
+              OR role = 'customer'
+              OR role IS NULL
+            )
+          ORDER BY id DESC
+        `);
+
+      return res.rows;
+
+    } catch (err) {
+      return memUsers.filter(
+        u =>
+          !u.is_admin &&
+          u.id !== 1
+      );
+    }
+  },
+
+  async createNotification({
+    userId,
+    title,
+    message,
+    type = 'system'
+  }) {
+    const uId =
+      parseInt(userId, 10);
+
+    if (!uId) {
+      return null;
     }
 
     try {
-      const client = await pool.connect();
-      try {
-        // Sync any in-memory products into PostgreSQL if any exist
-        for (const p of memProducts) {
-          const checkRes = await client.query('SELECT id FROM products WHERE title = $1', [p.title]);
-          if (checkRes.rows.length === 0) {
-            const insRes = await client.query(`
-              INSERT INTO products (title, description, price, category_id, phone, seller_phone, whatsapp_number, location, condition, image, image_url, payment_code, quantity, approved)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1)
-              RETURNING id
-            `, [p.title, p.description, p.price, p.category_id, p.phone, p.seller_phone || p.phone, p.whatsapp_number, p.location || 'Kampala, Uganda', p.condition || 'Brand New', p.image, p.image_url || p.image, p.payment_code, p.quantity || 1]);
-            
-            const newId = insRes.rows[0].id;
-            const prodImgs = memProductImages.filter(img => img.product_id === p.id);
-            for (let i = 0; i < prodImgs.length; i++) {
-              await client.query(`
-                INSERT INTO product_images (product_id, image_path, image_url, is_main)
-                VALUES ($1, $2, $3, $4)
-              `, [newId, prodImgs[i].image_path || prodImgs[i].image_url, prodImgs[i].image_url || prodImgs[i].image_path, i === 0]);
-            }
+      const res =
+        await executePgQuery(`
+          INSERT INTO notifications (
+            user_id,
+            title,
+            message,
+            type,
+            is_read,
+            created_at
+          )
+          VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            0,
+            CURRENT_TIMESTAMP
+          )
+          RETURNING *
+        `, [
+          uId,
+          title,
+          message,
+          type
+        ]);
+
+      const notification =
+        res.rows[0];
+
+      memNotifications.unshift(
+        notification
+      );
+
+      return notification;
+
+    } catch (err) {
+      const notification = {
+        id: memNextNotifId++,
+        user_id: uId,
+        title,
+        message,
+        type,
+        is_read: 0,
+        created_at: new Date()
+      };
+
+      memNotifications.unshift(
+        notification
+      );
+
+      return notification;
+    }
+  },
+
+  async getNotifications(userId) {
+    const uId =
+      parseInt(userId, 10);
+
+    if (!uId) {
+      return [];
+    }
+
+    try {
+      const res =
+        await executePgQuery(`
+          SELECT *
+          FROM notifications
+          WHERE user_id = $1
+          ORDER BY id DESC
+        `, [uId]);
+
+      return res.rows;
+
+    } catch (err) {
+      return memNotifications
+        .filter(
+          n => n.user_id === uId
+        )
+        .sort(
+          (a, b) =>
+            b.id - a.id
+        );
+    }
+  },
+
+  async markNotificationRead(id, userId) {
+    const nId =
+      parseInt(id, 10);
+
+    const uId =
+      parseInt(userId, 10);
+
+    if (!nId || !uId) {
+      return false;
+    }
+
+    try {
+      await executePgQuery(`
+        UPDATE notifications
+        SET is_read = 1
+        WHERE id = $1
+          AND user_id = $2
+      `, [
+        nId,
+        uId
+      ]);
+
+      const notification =
+        memNotifications.find(
+          n =>
+            n.id === nId &&
+            n.user_id === uId
+        );
+
+      if (notification) {
+        notification.is_read = 1;
+      }
+
+      return true;
+
+    } catch (err) {
+      const notification =
+        memNotifications.find(
+          n =>
+            n.id === nId &&
+            n.user_id === uId
+        );
+
+      if (notification) {
+        notification.is_read = 1;
+        return true;
+      }
+
+      return false;
+    }
+  },
+
+  async markAllNotificationsRead(userId) {
+    const uId =
+      parseInt(userId, 10);
+
+    if (!uId) {
+      return false;
+    }
+
+    try {
+      await executePgQuery(`
+        UPDATE notifications
+        SET is_read = 1
+        WHERE user_id = $1
+      `, [uId]);
+
+      memNotifications.forEach(
+        n => {
+          if (n.user_id === uId) {
+            n.is_read = 1;
           }
         }
-
-        const [prodCount, imgCount, userCount, orderCount, catCount] = await Promise.all([
-          client.query('SELECT COUNT(*) FROM products'),
-          client.query('SELECT COUNT(*) FROM product_images'),
-          client.query('SELECT COUNT(*) FROM users'),
-          client.query('SELECT COUNT(*) FROM orders'),
-          client.query('SELECT COUNT(*) FROM categories')
-        ]);
-
-        return {
-          success: true,
-          isConnected: true,
-          counts: {
-            products: parseInt(prodCount.rows[0].count, 10),
-            product_images: parseInt(imgCount.rows[0].count, 10),
-            users: parseInt(userCount.rows[0].count, 10),
-            orders: parseInt(orderCount.rows[0].count, 10),
-            categories: parseInt(catCount.rows[0].count, 10)
-          }
-        };
-      } finally {
-        client.release();
-      }
-    } catch (err) {
-      lastDbError = err.message;
-      lastDbErrorCode = err.code || null;
-      return {
-        success: false,
-        isConnected: false,
-        error: err.message
-      };
-    }
-  },
-
-  async getSupabaseDiagnostics() {
-    let latencyMs = null;
-    let counts = {
-      products: memProducts.length,
-      product_images: memProductImages.length,
-      users: memUsers.length,
-      orders: memOrders.length,
-      categories: memCategories.length
-    };
-    let cloudCounts = null;
-    let sampleRows = [];
-    let serverTime = null;
-    let currentDatabase = 'postgres';
-    let currentHost = lastDbHost || (process.env.PGHOST || 'db.ijizfozhorgaidgjonws.supabase.co');
-
-    if (isConnectedToPostgres && pool) {
-      try {
-        const start = Date.now();
-        const pingRes = await pool.query('SELECT NOW() as server_time, current_database() as db_name');
-        latencyMs = Date.now() - start;
-        serverTime = pingRes.rows[0]?.server_time || new Date();
-        currentDatabase = pingRes.rows[0]?.db_name || 'postgres';
-
-        const [prodCount, imgCount, userCount, orderCount, catCount] = await Promise.all([
-          pool.query('SELECT COUNT(*) FROM products'),
-          pool.query('SELECT COUNT(*) FROM product_images'),
-          pool.query('SELECT COUNT(*) FROM users'),
-          pool.query('SELECT COUNT(*) FROM orders'),
-          pool.query('SELECT COUNT(*) FROM categories')
-        ]);
-
-        cloudCounts = {
-          products: parseInt(prodCount.rows[0].count, 10),
-          product_images: parseInt(imgCount.rows[0].count, 10),
-          users: parseInt(userCount.rows[0].count, 10),
-          orders: parseInt(orderCount.rows[0].count, 10),
-          categories: parseInt(catCount.rows[0].count, 10)
-        };
-
-        const prodSample = await pool.query(`
-          SELECT p.id, p.title, p.price, p.quantity, p.condition, p.location, p.phone, p.whatsapp_number, p.payment_code, p.approved, p.image, p.created_at, c.name as category_name
-          FROM products p
-          LEFT JOIN categories c ON p.category_id = c.id
-          ORDER BY p.id DESC
-          LIMIT 15
-        `);
-        sampleRows = prodSample.rows.map(r => ({ ...r, price: parseFloat(r.price), is_in_supabase: true }));
-      } catch (err) {
-        lastDbError = err.message;
-        lastDbErrorCode = err.code || null;
-      }
-    }
-
-    // Mask sensitive connection string for display
-    let maskedUrl = 'postgresql://postgres:••••••••@db.ijizfozhorgaidgjonws.supabase.co:5432/postgres';
-    if (rawConnectionString) {
-      maskedUrl = rawConnectionString.replace(/:([^:@]+)@/, ':••••••••@');
-    }
-
-    return {
-      isConnected: isConnectedToPostgres,
-      host: currentHost,
-      projectRef: lastDbProjectRef || 'ijizfozhorgaidgjonws',
-      database: currentDatabase,
-      maskedUrl,
-      rawConnectionString: rawConnectionString || '',
-      lastError: lastDbError,
-      lastErrorCode: lastDbErrorCode,
-      lastSuccessTime: lastDbSuccessTime,
-      latencyMs,
-      serverTime,
-      counts: cloudCounts || counts,
-      isFallback: !isConnectedToPostgres,
-      sampleRows
-    };
-  },
-
-  async getSupabaseRawProducts(limit = 50) {
-    if (isConnectedToPostgres && pool) {
-      try {
-        const res = await pool.query(`
-          SELECT p.id, p.title, p.description, p.price, p.quantity, p.condition, p.location, p.phone, p.seller_phone, p.whatsapp_number, p.payment_code, p.approved, p.image, p.created_at, c.name as category_name
-          FROM products p
-          LEFT JOIN categories c ON p.category_id = c.id
-          ORDER BY p.id DESC
-          LIMIT $1
-        `, [limit]);
-        return res.rows.map(r => ({ ...r, price: parseFloat(r.price), is_in_supabase: true }));
-      } catch (err) {
-        console.warn('Error fetching Supabase raw products:', err.message);
-      }
-    }
-    return memProducts.map(p => {
-      const cat = memCategories.find(c => c.id === p.category_id);
-      return { ...p, category_name: cat ? cat.name : 'General', is_in_supabase: false };
-    }).slice(0, limit);
-  },
-
-  async reconnectDatabase(targetInput) {
-    let connStr = '';
-    if (typeof targetInput === 'string') {
-      connStr = targetInput.trim();
-    } else if (targetInput && targetInput.connectionString) {
-      connStr = targetInput.connectionString.trim();
-    } else if (targetInput && targetInput.password) {
-      const pass = targetInput.password.trim();
-      const ref = (targetInput.projectRef || lastDbProjectRef || 'ijizfozhorgaidgjonws').trim();
-      const host = targetInput.host || (targetInput.usePooler ? `aws-0-eu-central-1.pooler.supabase.com` : `db.${ref}.supabase.co`);
-      const port = targetInput.port || (targetInput.usePooler ? 6543 : 5432);
-      const user = targetInput.usePooler ? `postgres.${ref}` : 'postgres';
-      const dbName = targetInput.database || 'postgres';
-      connStr = `postgresql://${user}:${encodeURIComponent(pass)}@${host}:${port}/${dbName}`;
-    }
-
-    if (!connStr) {
-      return {
-        success: false,
-        isConnected: false,
-        error: 'No database connection string or password provided.'
-      };
-    }
-
-    const testConfig = parsePgConfig(connStr);
-    if (!testConfig) {
-      return {
-        success: false,
-        isConnected: false,
-        error: 'Failed to parse database connection URI.'
-      };
-    }
-
-    const testPool = new Pool(testConfig);
-    try {
-      const client = await testPool.connect();
-      try {
-        await client.query('SELECT 1');
-      } finally {
-        client.release();
-      }
-
-      // If test succeeded, replace the global pool
-      if (pool) {
-        try { pool.end(); } catch {}
-      }
-      pool = testPool;
-      rawConnectionString = connStr;
-      saveDbConfigToDisk({
-  connectionString: connStr
-});
-      isConnectedToPostgres = true;
-      lastDbError = null;
-      lastDbErrorCode = null;
-      lastDbSuccessTime = new Date();
-
-      // Run schema migrations and sync any in-memory products
-      await initDatabase();
-      const syncRes = await this.syncDatabase();
-
-      return {
-        success: true,
-        isConnected: true,
-        message: 'Successfully connected to Supabase PostgreSQL database! All tables and products are synchronized.',
-        counts: syncRes.counts || null
-      };
-    } catch (err) {
-      try { testPool.end(); } catch {}
-      lastDbError = err.message;
-      lastDbErrorCode = err.code || null;
-      
-      let helpfulAdvice = '';
-      if (err.code === 'ECONNREFUSED' || (err.message && err.message.includes('ECONNREFUSED'))) {
-        helpfulAdvice = 'Direct Supabase host (db.ijizfozhorgaidgjonws.supabase.co) only supports IPv6. To connect from cloud servers, use the Supabase Connection Pooler: In your Supabase Dashboard, click the green "Connect" button at the top header, select "Transaction pooler" or "Session pooler" (e.g. aws-0-[region].pooler.supabase.com:6543) and copy the URI.';
-      } else if (err.code === '28P01' || (err.message && err.message.includes('password authentication failed'))) {
-        helpfulAdvice = 'Password Authentication Failed (Code: 28P01). The database password does not match your Supabase project. Go to Supabase Dashboard -> Project Settings -> Database -> Database password, reset/set your password, and enter the new password.';
-      } else if (err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT') {
-        helpfulAdvice = 'Network host unreachable or timed out. Please check your Supabase project status or try using the Supabase Connection Pooler URI (Session Mode or Transaction Mode).';
-      }
-
-      return {
-        success: false,
-        isConnected: isConnectedToPostgres,
-        error: err.message,
-        code: err.code || null,
-        helpfulAdvice
-      };
-    }
-  },
-
-  // Notification Methods
-  async createNotification({ userId, title, message, type = 'system' }) {
-    if (isConnectedToPostgres && pool) {
-      try {
-        await pool.query(
-          'INSERT INTO notifications (user_id, title, message, type, is_read) VALUES ($1, $2, $3, $4, FALSE)',
-          [userId, title, message, type]
-        );
-      } catch (err) {
-        console.warn('Could not insert notification into Postgres:', err.message);
-      }
-      return;
-    }
-    memNotifications.unshift({
-      id: memNextNotifId++,
-      user_id: userId,
-      title,
-      message,
-      type,
-      is_read: 0,
-      created_at: new Date()
-    });
-  },
-
-  async getNotificationsByUser(userId) {
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query('SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
-      return res.rows;
-    }
-    return memNotifications.filter(n => n.user_id === userId).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  },
-
-  async markNotificationAsRead(notificationId, userId) {
-    if (isConnectedToPostgres && pool) {
-      await pool.query('UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2', [notificationId, userId]);
-      return;
-    }
-    const notif = memNotifications.find(n => n.id === notificationId && n.user_id === userId);
-    if (notif) notif.is_read = 1;
-  },
-
-  async markAllNotificationsAsRead(userId) {
-    if (isConnectedToPostgres && pool) {
-      await pool.query('UPDATE notifications SET is_read = TRUE WHERE user_id = $1', [userId]);
-      return;
-    }
-    memNotifications.forEach(n => {
-      if (n.user_id === userId) {
-        n.is_read = 1;
-      }
-    });
-  },
-
-  async deleteNotification(notificationId, userId) {
-    if (isConnectedToPostgres && pool) {
-      await pool.query('DELETE FROM notifications WHERE id = $1 AND user_id = $2', [notificationId, userId]);
-      return;
-    }
-    const idx = memNotifications.findIndex(n => n.id === notificationId && n.user_id === userId);
-    if (idx !== -1) {
-      memNotifications.splice(idx, 1);
-    }
-  },
-
-  async deleteAllNotifications(userId) {
-    if (isConnectedToPostgres && pool) {
-      await pool.query('DELETE FROM notifications WHERE user_id = $1', [userId]);
-      return;
-    }
-    memNotifications = memNotifications.filter(n => n.user_id !== userId);
-  },
-
-  // Messaging System
-  async sendMessage({ senderId, receiverId, productId, message }) {
-    if (isConnectedToPostgres && pool) {
-      const res = await pool.query(
-        'INSERT INTO messages (sender_id, receiver_id, product_id, message, is_read) VALUES ($1, $2, $3, $4, FALSE) RETURNING *',
-        [senderId, receiverId, productId || null, message]
       );
-      // Notify receiver
-      const sender = await this.findUserById(senderId);
-      await this.createNotification({
-        userId: receiverId,
-        title: `💬 New Message from ${sender ? sender.name : 'Customer'}`,
-        message: message.length > 80 ? message.substring(0, 77) + '...' : message,
-        type: 'message'
-      });
-      return res.rows[0];
+
+      return true;
+
+    } catch (err) {
+      memNotifications.forEach(
+        n => {
+          if (n.user_id === uId) {
+            n.is_read = 1;
+          }
+        }
+      );
+
+      return true;
     }
-
-    const newMsg = {
-      id: memNextMsgId++,
-      sender_id: senderId,
-      receiver_id: receiverId,
-      product_id: productId || null,
-      message,
-      is_read: 0,
-      created_at: new Date()
-    };
-    memMessages.push(newMsg);
-
-    const sender = memUsers.find(u => u.id === senderId);
-    this.createNotification({
-      userId: receiverId,
-      title: `💬 New Message from ${sender ? sender.name : 'Customer'}`,
-      message: message.length > 80 ? message.substring(0, 77) + '...' : message,
+  },
       type: 'message'
     });
 
@@ -2197,7 +3034,7 @@ const db = {
         )
         VALUES (
           $1::INT, $2::INT, $3::VARCHAR, $4::VARCHAR,
-          $5::VARCHAR, $6::VARCHAR, $7::TEXT, $8::TEXT,
+                    $5::VARCHAR, $6::VARCHAR, $7::TEXT, $8::TEXT,
           $9::NUMERIC, $10::NUMERIC, $11::VARCHAR, 'Mobile Money', 'Pending'
         )
         RETURNING id
@@ -2497,7 +3334,7 @@ const db = {
         VALUES ($1, $2, $3, $4, 'Pending')
         RETURNING *
       `, [orderId, userId, reason, amount]);
-      return res.rows[0];
+            return res.rows[0];
     }
 
     const ord = memOrders.find(o => o.id === orderId);
@@ -2684,7 +3521,7 @@ const db = {
         ownerShareAmount,
         sellersShareAmount,
         ownerPhoneNumber: '+256 763 480495',
-        ownerWhatsApp: '256763480495'
+        ownerWhatsApp: '+256 763 480495'
       },
       fulfillmentQueue: {
         pending: pendingOrders,
@@ -2719,7 +3556,7 @@ const db = {
         campaigns,
         trafficSources
       },
-      database: {
+            database: {
         isConnected: isDbHealthy,
         latencyMs: dbLatencyMs,
         type: isDbHealthy ? 'Supabase PostgreSQL (Cloud Active & Persistent)' : 'Temporary In-Memory Fallback',
@@ -2729,4 +3566,6 @@ const db = {
   }
 };
 
-module.exports = { db, initDatabase };
+module.exports = db;
+module.exports.db = db;
+module.exports.initDatabase = initDatabase;
