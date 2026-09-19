@@ -6,15 +6,24 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
+
+const {
+  adminRegistrationCode,
+  getCookieOptions,
+  isProduction,
+  port: PORT,
+  sessionSecret: SESSION_SECRET,
+  verifyHmacToken
+} = require('./config');
+
 const { db, initDatabase } = require('./db');
 const { validateEmailAuthenticity } = require('./emailValidator');
-
 const app = express();
 const PORT = 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'easymarket_secret_key_2026_supersecure';
 
 // Trust proxy for Cloud Run and reverse proxies
-app.set('trust proxy', 1);
+app.set('trust proxy', isProduction ? 1 : false);
 
 // Ensure upload directory exists
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
@@ -156,15 +165,9 @@ app.use(session({
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  proxy: true,
-  cookie: {
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    httpOnly: true,
-    sameSite: 'none',
-    secure: true
-  }
+  proxy: isProduction,
+  cookie: getCookieOptions()
 }));
-
 // Signed Auth Token Generator / Verifier
 function createAuthToken(userData) {
   const payload = Buffer.from(JSON.stringify(userData)).toString('base64url');
@@ -172,21 +175,6 @@ function createAuthToken(userData) {
   return `${payload}.${signature}`;
 }
 
-function verifyAuthToken(token) {
-  if (!token || typeof token !== 'string') return null;
-  const parts = token.split('.');
-  if (parts.length !== 2) return null;
-  const [payload, signature] = parts;
-  const expectedSignature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
-  if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
-    try {
-      return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
 
 // Global Auth Context & Notification Badge Middleware
 app.use(async (req, res, next) => {
@@ -197,7 +185,7 @@ app.use(async (req, res, next) => {
 
   if (!req.session || !req.session.user_id) {
     const token = req.cookies.em_token || req.headers['x-auth-token'];
-    const verified = verifyAuthToken(token);
+    const verified = verifyHmacToken(token);
     if (verified && verified.id) {
       req.session.user_id = verified.id;
       req.session.user_name = verified.name;
@@ -211,7 +199,7 @@ app.use(async (req, res, next) => {
   // Ensure user phone & whatsapp are loaded into session
   if (req.session && req.session.user_id && (!req.session.user_whatsapp || !req.session.user_phone)) {
     try {
-      const u = await db.getUserById(req.session.user_id);
+      const u = await db.findUserById(req.session.user_id);
       if (u) {
         req.session.user_phone = u.phone || '';
         req.session.user_whatsapp = u.whatsapp_number || u.phone || '';
@@ -264,20 +252,19 @@ function setAuthSession(req, res, userPayload) {
     is_admin: userPayload.is_admin ? 1 : 0
   });
 
-  res.cookie('em_token', token, {
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    httpOnly: true,
-    sameSite: 'none',
-    secure: true
+  res.cookie('em_token', token, getCookieOptions());
+function clearAuthSession(req, res) {
+  const cookieOptions = getCookieOptions();
+
+  req.session.destroy(error => {
+    if (error) {
+      console.warn('Session destroy warning:', error.message);
+    }
+
+    res.clearCookie('easymarket_sid', cookieOptions);
+    res.clearCookie('em_token', cookieOptions);
   });
 }
-
-function clearAuthSession(req, res) {
-  req.session.destroy(() => {});
-  res.clearCookie('easymarket_sid', { sameSite: 'none', secure: true });
-  res.clearCookie('em_token', { sameSite: 'none', secure: true });
-}
-
 // ----------------------------------------------------
 // CORE MARKETPLACE ROUTES
 // ----------------------------------------------------
