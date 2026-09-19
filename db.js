@@ -2097,7 +2097,7 @@ const db = {
   async createPasswordResetOtp(email) {
     const cleanEmail = email.trim().toLowerCase();
     // 6-digit numeric OTP code
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpCode = generateOtp();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // Valid for 15 minutes
 
     if (isConnectedToPostgres && pool) {
