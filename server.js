@@ -19,8 +19,6 @@ const {
 const { db, initDatabase } = require('./db');
 const { validateEmailAuthenticity } = require('./emailValidator');
 const app = express();
-const PORT = 3000;
-const SESSION_SECRET = process.env.SESSION_SECRET || 'easymarket_secret_key_2026_supersecure';
 
 // Trust proxy for Cloud Run and reverse proxies
 app.set('trust proxy', isProduction ? 1 : false);
