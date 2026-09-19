@@ -250,7 +250,9 @@ function setAuthSession(req, res, userPayload) {
     is_admin: userPayload.is_admin ? 1 : 0
   });
 
-  res.cookie('em_token', token, getCookieOptions());
+    res.cookie('em_token', token, getCookieOptions());
+}
+
 function clearAuthSession(req, res) {
   const cookieOptions = getCookieOptions();
 
